@@ -19,6 +19,7 @@ demo:
   cd .. && docker buildx bake --progress plain -f docker/docker-bake.hcl
   cd .. && docker buildx bake --progress plain -f docker/demo/docker-bake.hcl
   cd demo && RUN_ID=$(date +%s) docker compose up -d
+  @echo " \x1b[32m✔ \x1b[37mUI Running at \x1b[32mhttp://localhost:8080"
 
 # Stop the demo stack (keeps the Tempo data volume).
 demo-down:
