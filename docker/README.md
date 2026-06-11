@@ -38,7 +38,7 @@ Deploying elsewhere is the same image with the env var set, e.g.:
 
 ```sh
 docker run -p 8080:8080 -e TEMPO_URL=https://tempo.example.com \
-  ghcr.io/commonwarexyz/tracer-web:local
+  ghcr.io/clabby/tracer-web:latest
 ```
 
 ## Run the demo
