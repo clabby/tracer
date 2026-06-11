@@ -1,0 +1,69 @@
+.xm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  animation: xm-fade var(--speed) var(--ease);
+}
+@keyframes xm-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.xm {
+  display: flex;
+  flex-direction: column;
+  width: min(860px, 100%);
+  height: min(640px, 100%);
+  box-shadow: var(--shadow);
+  animation: xm-in 150ms var(--ease);
+}
+@keyframes xm-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+}
+
+.xm-header {
+  gap: 10px;
+}
+.xm-meta {
+  flex: 1;
+  font-size: var(--font-size-sm);
+}
+.xm-copy.xm-copied {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.xm-text {
+  flex: 1;
+  margin: var(--pad);
+  padding: 10px;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  resize: none;
+  outline: none;
+  white-space: pre;
+}
+.xm-text:focus {
+  border-color: var(--accent-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xm-backdrop,
+  .xm {
+    animation: none;
+  }
+}

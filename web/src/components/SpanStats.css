@@ -1,0 +1,37 @@
+/* SpanStats — per-span-name aggregate table for one trace. */
+
+.stats {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.stats-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.stats-table th.num,
+.stats-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-table tbody tr {
+  cursor: default;
+}
+
+.stats-name {
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+
+.stats-straggler {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  color: var(--text-muted);
+}

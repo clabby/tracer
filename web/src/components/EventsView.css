@@ -1,0 +1,125 @@
+/* EventsView — every event in the trace, filterable by level and name. */
+
+.ev {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ev-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px var(--pad);
+  border-bottom: 1px solid var(--border);
+}
+
+.ev-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ev-chip {
+  transition: all var(--speed) var(--ease), transform var(--speed) var(--ease);
+}
+.ev-chip:active {
+  transform: scale(0.94);
+}
+.ev-chip.active {
+  background: var(--surface-raised);
+  border-color: var(--ev-level);
+  color: var(--ev-level);
+}
+.ev-chip-swatch {
+  width: 7px;
+  height: 7px;
+  background: var(--ev-level);
+}
+
+.ev-filter {
+  flex: 1;
+  min-width: 160px;
+  max-width: 280px;
+  height: 24px;
+  font-size: var(--font-size-sm);
+}
+
+.ev-count {
+  margin-left: auto;
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.ev-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.ev table.data th,
+.ev table.data td {
+  white-space: nowrap;
+}
+
+.ev-offset {
+  color: var(--text-muted);
+}
+
+.ev-name {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ev-span-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent-text);
+  cursor: pointer;
+  text-align: left;
+}
+.ev-span-link:hover {
+  text-decoration: underline;
+}
+
+/* Visual cue for why rows are highlighted: they share the selected span. */
+tr.selected .ev-span-link-hl {
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-pill);
+  padding: 0 8px;
+  font-weight: 600;
+}
+
+.ev-instance {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ev-attrs {
+  max-width: 60ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ev-notice {
+  padding: 8px var(--pad);
+  font-size: var(--font-size-sm);
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ev-chip {
+    transition: none;
+  }
+  .ev-chip:active {
+    transform: none;
+  }
+}

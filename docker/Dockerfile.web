@@ -1,0 +1,25 @@
+# Build context is the repository root. Bake resolves the `context = "."` in
+# docker-bake.hcl against the caller's cwd, so the build must be invoked from
+# the repo root (as `just build` does).
+ARG BUN_VERSION=1
+
+FROM oven/bun:${BUN_VERSION} AS build
+
+WORKDIR /app
+
+# Install dependencies first so they cache independently of source changes.
+COPY web/package.json web/bun.lock ./
+RUN bun install --frozen-lockfile
+
+COPY web/ ./
+RUN bun run build
+
+FROM caddy:2-alpine
+
+COPY docker/Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /app/dist /srv
+
+# Fail fast if the required TEMPO_URL is missing, then run Caddy.
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

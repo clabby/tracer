@@ -1,0 +1,10 @@
+# The build context is the repository root (see docker/docker-bake.hcl).
+# Keep host build artifacts out of the context: Dockerfile.web's `COPY web/ ./`
+# would otherwise overlay the host node_modules over the image's
+# `bun install --frozen-lockfile` result, and Dockerfile.loadgen's
+# `COPY loadgen/ ./` would ship the host target/ directory to the daemon.
+.git
+.docker-cache
+web/node_modules
+web/dist
+loadgen/target

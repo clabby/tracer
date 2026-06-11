@@ -1,0 +1,34 @@
+# Build the production web image. It serves the SPA and reverse-proxies
+# /tempo/* to the Tempo endpoint given by the TEMPO_URL env var at run time.
+build:
+  cd .. && docker buildx bake --progress plain -f docker/docker-bake.hcl
+
+# Run the standalone tracer web app against a Tempo API URL (required arg).
+# Build the image first with `just build`. The URL is a host:port (assumed
+# http) or a full URL. Examples:
+#   just app tempo.internal:3200
+#   just app https://tempo.example.com
+#   just app http://host.docker.internal:3200   # reach a Tempo on the host
+app tempo_url:
+  docker run --rm -p 8080:8080 -e TEMPO_URL={{tempo_url}} tracer-web:local
+
+# Build the demo images (the production web image + the loadgen image) and
+# start the demo stack: Tempo, four consensus-sim nodes, and the web viewer
+# pointed at the bundled Tempo. A fresh RUN_ID lines up rounds across nodes.
+demo:
+  cd .. && docker buildx bake --progress plain -f docker/docker-bake.hcl
+  cd .. && docker buildx bake --progress plain -f docker/demo/docker-bake.hcl
+  cd demo && RUN_ID=$(date +%s) docker compose up -d
+
+# Stop the demo stack (keeps the Tempo data volume).
+demo-down:
+  cd demo && docker compose down
+
+# Tail demo logs, or one service: `just demo-logs node-0`
+demo-logs service="":
+  cd demo && docker compose logs -f {{service}}
+
+# Remove demo containers, the Tempo data volume, and the locally built images.
+clean:
+  cd demo && docker compose down -v
+  docker image rm -f tracer-web:local tracer-loadgen:local || true

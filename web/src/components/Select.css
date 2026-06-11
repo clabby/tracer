@@ -1,0 +1,102 @@
+/* Select — styled dropdown trigger + panel popover (see Combobox for the
+   shared menu language). */
+
+.sel {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+
+.sel-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+}
+.sel-trigger:hover {
+  border-color: var(--border-strong);
+}
+.sel[data-open='true'] .sel-trigger,
+.sel-trigger[aria-expanded='true'] {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+
+.sel-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sel-chevron {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  color: var(--text-faint);
+  transition: transform var(--speed) var(--ease);
+}
+.sel-trigger[aria-expanded='true'] .sel-chevron {
+  transform: rotate(180deg);
+  color: var(--text-muted);
+}
+
+/* Menu: panel-styled, absolutely positioned under the trigger, opening with
+   a 120ms fade + 4px translate-up (matches Combobox). */
+.sel-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow);
+  animation: sel-open var(--speed) var(--ease);
+}
+
+@keyframes sel-open {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sel-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sel-option.active {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.sel-option.selected {
+  color: var(--accent-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sel-menu {
+    animation: none;
+  }
+  .sel-chevron {
+    transition: none;
+  }
+}

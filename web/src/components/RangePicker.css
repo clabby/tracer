@@ -1,0 +1,182 @@
+/* RangePicker — time-range trigger + inline preset/custom menu. */
+
+.rp {
+  position: relative;
+}
+
+.rp-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+}
+.rp-icon {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  color: var(--text-faint);
+}
+.rp-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rp-chevron {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  color: var(--text-faint);
+  transition: transform var(--speed) var(--ease);
+}
+.rp-trigger[aria-expanded='true'] .rp-chevron {
+  transform: rotate(180deg);
+}
+
+/* Inline menu (not a portal): expands under the trigger. */
+.rp-menu {
+  margin-top: 6px;
+  padding: 4px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow);
+  animation: rp-open var(--speed) var(--ease);
+}
+@keyframes rp-open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.rp-preset {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background var(--speed) var(--ease),
+    color var(--speed) var(--ease);
+}
+.rp-preset:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.rp-preset.active {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--accent-text);
+}
+.rp-preset-label {
+  font-size: var(--font-size-sm);
+}
+.rp-preset-hint {
+  font-size: var(--font-size-xs);
+  color: var(--text-faint);
+}
+.rp-preset-arrow {
+  width: 9px;
+  height: 9px;
+  color: var(--text-faint);
+}
+
+.rp-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}
+
+/* ---- custom editor ---- */
+
+.rp-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px;
+}
+.rp-back {
+  align-self: flex-start;
+  gap: 6px;
+}
+
+.rp-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.rp-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--inset);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--speed) var(--ease);
+}
+.rp-tab:hover {
+  border-color: var(--border-strong);
+}
+.rp-tab.active {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+.rp-tab-label {
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.rp-tab-value {
+  font-size: var(--font-size-sm);
+  color: var(--text);
+}
+
+.rp-dt {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rp-time {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.rp-time-label {
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.rp-time-fields {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.rp-time-input {
+  width: 44px;
+  padding: 0 6px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.rp-time-colon {
+  color: var(--text-faint);
+}
+
+.rp-apply {
+  width: 100%;
+  justify-content: center;
+}

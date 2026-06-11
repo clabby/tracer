@@ -1,0 +1,174 @@
+/* SpanDetails — right-side inspector panel for the selected span. */
+
+.sd {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sd-header {
+  gap: 8px;
+}
+
+.sd-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--font-size);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sd-close {
+  flex: none;
+  font-size: var(--font-size-lg);
+  line-height: 1;
+}
+
+.sd-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--pad);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.sd-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Label/value rows shared by meta, timing and relations blocks. */
+.sd-grid {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 6px 12px;
+  align-items: baseline;
+}
+
+.sd-k {
+  margin-bottom: 0;
+}
+
+.sd-v {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sd-instance {
+  cursor: default;
+  color: var(--text);
+}
+.sd-instance:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.sd-status-error {
+  color: var(--error);
+}
+
+/* Attributes — informational table, no row affordances. */
+.sd-attrs td {
+  padding: 4px 8px;
+}
+.sd-attrs tbody tr {
+  cursor: default;
+}
+.sd-attrs tbody tr:hover {
+  background: transparent;
+}
+.sd-attrs tbody tr:last-child td {
+  border-bottom: none;
+}
+.sd-attr-key {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.sd-attr-val {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* Events within the span. */
+.sd-events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sd-event {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 1px 4px;
+  margin: 0 -4px;
+  cursor: pointer;
+  transition: background var(--speed) var(--ease);
+}
+.sd-event:hover {
+  background: var(--surface-hover);
+}
+.sd-event-attrs {
+  margin-left: auto;
+  flex: none;
+}
+.sd-event-time {
+  flex: none;
+  min-width: 64px;
+  text-align: right;
+  color: var(--text-muted);
+}
+
+/* Parent / children links. */
+.sd-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent-text);
+  cursor: pointer;
+  text-align: left;
+  transition: color var(--speed) var(--ease);
+}
+.sd-link:hover {
+  text-decoration: underline;
+}
+
+.sd-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sd-child-dur {
+  margin-left: 8px;
+}
+
+.sd-actions {
+  display: flex;
+  gap: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-link {
+    transition: none;
+  }
+}

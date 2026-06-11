@@ -1,0 +1,84 @@
+/* Combobox — debounced suggestion input with a portal-free dropdown. */
+
+.cb {
+  position: relative;
+  min-width: 0;
+}
+
+.cb-input {
+  width: 100%;
+}
+
+.cb-input[aria-invalid='true'] {
+  border-color: var(--error);
+}
+.cb-input[aria-invalid='true']:focus {
+  border-color: var(--error);
+  box-shadow: 0 0 0 3px var(--error-bg);
+}
+
+.cb-spinner {
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  pointer-events: none;
+}
+
+/* Dropdown: panel-styled, absolutely positioned under the input (no portal),
+   opening with a 120ms fade + 4px translate-up. */
+.cb-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow);
+  animation: cb-open var(--speed) var(--ease);
+}
+
+@keyframes cb-open {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cb-option {
+  display: block;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cb-option.active {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* Matched substring of the query, accented. */
+.cb-match {
+  color: var(--accent-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cb-menu {
+    animation: none;
+  }
+}

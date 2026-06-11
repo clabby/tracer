@@ -1,0 +1,141 @@
+/*
+ * Design tokens — the entire visual language lives here.
+ *
+ * The aesthetic follows diffs.com (Pierre): monospace-forward typography,
+ * quiet neutral surfaces separated by crisp 1px borders, soft indigo accent,
+ * gentle radii, near-zero shadows, and a pastel categorical palette used to
+ * distinguish instances (nodes) on the flamegraph.
+ */
+
+:root {
+  /* Typography — Berkeley Mono first, graceful local fallbacks. */
+  --font-mono:
+    'Berkeley Mono', 'TX-02', 'JetBrains Mono', 'SF Mono', 'Menlo',
+    ui-monospace, monospace;
+  --font-size: 13px;
+  --font-size-sm: 11.5px;
+  --font-size-xs: 10.5px;
+  --font-size-lg: 15px;
+  --line-height: 1.5;
+
+  /* Geometry */
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-pill: 999px;
+  --control-h: 30px;
+  --row-h: 28px;
+  --pad: 12px;
+  --pad-lg: 20px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --speed: 120ms;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #0e0e12;
+  --surface: #16161b;
+  --surface-raised: #1b1b21;
+  --surface-hover: #202027;
+  --inset: #101015;
+
+  --border: #26262e;
+  --border-strong: #34343e;
+
+  --text: #e7e7ec;
+  --text-muted: #9b9ba6;
+  --text-faint: #62626d;
+
+  --accent: #7b87f7;
+  --accent-text: #a3abff;
+  --accent-bg: rgba(123, 135, 247, 0.12);
+  --accent-border: rgba(123, 135, 247, 0.45);
+
+  --ok: #4fb6a2;
+  --warn: #e0a458;
+  --error: #e0635c;
+  --error-bg: rgba(224, 99, 92, 0.12);
+
+  /* Log levels */
+  --level-trace: #62626d;
+  --level-debug: #6faee8;
+  --level-info: #4fb6a2;
+  --level-warn: #e0a458;
+  --level-error: #e0635c;
+
+  /* Categorical palette for instances (nodes). Pastel, distinguishable. */
+  --instance-0: #7b87f7;
+  --instance-1: #4fb6a2;
+  --instance-2: #e0a458;
+  --instance-3: #d976b6;
+  --instance-4: #6faee8;
+  --instance-5: #9a8ff2;
+  --instance-6: #8fbf6f;
+  --instance-7: #e08a7a;
+  --instance-8: #5fc4ce;
+  --instance-9: #c9a2f5;
+  --instance-10: #c9c46a;
+  --instance-11: #7a9be0;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.25);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+
+  --flame-bg: #121217;
+  --flame-grid: #1e1e25;
+  --selection: rgba(123, 135, 247, 0.25);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #f7f7f8;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-hover: #f1f1f4;
+  --inset: #f1f1f4;
+
+  --border: #e4e4e9;
+  --border-strong: #d2d2da;
+
+  --text: #1b1b20;
+  --text-muted: #5f5f6b;
+  --text-faint: #9a9aa6;
+
+  --accent: #5762d5;
+  --accent-text: #4550c8;
+  --accent-bg: rgba(87, 98, 213, 0.08);
+  --accent-border: rgba(87, 98, 213, 0.4);
+
+  --ok: #1f9077;
+  --warn: #b97c22;
+  --error: #c8423a;
+  --error-bg: rgba(200, 66, 58, 0.08);
+
+  --level-trace: #9a9aa6;
+  --level-debug: #3d7fc2;
+  --level-info: #1f9077;
+  --level-warn: #b97c22;
+  --level-error: #c8423a;
+
+  --instance-0: #5762d5;
+  --instance-1: #1f9077;
+  --instance-2: #b97c22;
+  --instance-3: #bb4f93;
+  --instance-4: #3d7fc2;
+  --instance-5: #7a6cd9;
+  --instance-6: #5e8f3e;
+  --instance-7: #c25f4b;
+  --instance-8: #2d9aa5;
+  --instance-9: #9c64d6;
+  --instance-10: #908a1f;
+  --instance-11: #4e6fc0;
+
+  --shadow: 0 1px 2px rgba(20, 20, 30, 0.06), 0 6px 24px rgba(20, 20, 30, 0.07);
+  --shadow-sm: 0 1px 2px rgba(20, 20, 30, 0.06);
+
+  --flame-bg: #fcfcfd;
+  --flame-grid: #ededf1;
+  --selection: rgba(87, 98, 213, 0.18);
+}

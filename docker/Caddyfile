@@ -1,0 +1,19 @@
+:8080 {
+	encode zstd gzip
+
+	# Reverse-proxy the Tempo HTTP API under /tempo (prefix stripped). The
+	# upstream is supplied at deploy time via the TEMPO_URL env var — the app
+	# itself has no Tempo endpoint setting. Use a host:port (assumed http,
+	# e.g. tempo:3200) or a full URL (e.g. https://tempo.example.com). If
+	# TEMPO_URL is unset, Caddy fails to start, so the endpoint is required.
+	handle_path /tempo/* {
+		reverse_proxy {$TEMPO_URL}
+	}
+
+	# Serve the SPA; unknown paths fall back to index.html for client routing.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

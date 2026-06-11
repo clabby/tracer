@@ -1,0 +1,39 @@
+# Build context is the repository root. Bake resolves the `context = "."` in
+# docker/demo/docker-bake.hcl against the caller's cwd, so the build must be
+# invoked from the repo root (as `just demo` does).
+ARG RUST_TOOLCHAIN=stable
+
+FROM rust:1-slim AS build
+ARG RUST_TOOLCHAIN
+
+# pkg-config and protobuf-compiler cover tonic/prost build scripts pulled in
+# by the OTLP gRPC exporter.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+# rust:1 already tracks the latest stable; only switch when pinning another
+# toolchain (e.g. nightly or an exact version).
+RUN if [ "${RUST_TOOLCHAIN}" != "stable" ]; then rustup default "${RUST_TOOLCHAIN}"; fi
+
+WORKDIR /loadgen
+
+COPY docker/demo/loadgen/ ./
+
+# Honor the lockfile when present; build unlocked otherwise.
+RUN if [ -f Cargo.lock ]; then \
+        cargo build --release --locked --bin consensus-sim; \
+    else \
+        cargo build --release --bin consensus-sim; \
+    fi
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /loadgen/target/release/consensus-sim /usr/local/bin/consensus-sim
+
+ENTRYPOINT ["/usr/local/bin/consensus-sim"]

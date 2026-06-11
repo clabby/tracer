@@ -1,0 +1,28 @@
+# Single-binary Tempo for local development. Traces land on the named volume
+# mounted at /var/tempo and are retained for 24 hours.
+
+server:
+  http_listen_port: 3200
+
+stream_over_http_enabled: true
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/blocks
+    wal:
+      path: /var/tempo/wal
+
+compactor:
+  compaction:
+    block_retention: 24h

@@ -1,0 +1,82 @@
+/* Calendar — month grid for the custom range picker. */
+
+.cal {
+  user-select: none;
+}
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.cal-title {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text);
+}
+.cal-nav {
+  width: 24px;
+  padding: 0;
+  justify-content: center;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.cal-dow {
+  margin-bottom: 2px;
+}
+.cal-dow-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+
+.cal-cell {
+  aspect-ratio: 1;
+  min-width: 0;
+}
+
+.cal-day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition:
+    background var(--speed) var(--ease),
+    color var(--speed) var(--ease),
+    border-color var(--speed) var(--ease);
+}
+.cal-day:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.cal-day.today {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.cal-day.selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cal-day {
+    transition: none;
+  }
+}

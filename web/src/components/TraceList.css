@@ -1,0 +1,175 @@
+/* TraceList — search results table inside a panel. */
+
+.tl {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tl-count {
+  font-size: var(--font-size-sm);
+}
+
+.tl-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.tl table.data th,
+.tl table.data td {
+  white-space: nowrap;
+}
+
+.tl table.data tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tl-id {
+  color: var(--accent-text);
+}
+
+.tl-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.tl-refresh {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tl-refresh-label {
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.tl-refresh-select {
+  width: 64px;
+}
+.tl-refresh-select .sel-trigger {
+  height: 24px;
+  padding: 0 8px;
+  font-size: var(--font-size-sm);
+}
+.tl-refresh-btn {
+  width: 28px;
+  justify-content: center;
+  padding: 0;
+}
+.tl-refresh-spinner {
+  width: 11px;
+  height: 11px;
+}
+
+.tl-name {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-matched {
+  margin-left: 8px;
+  font-size: var(--font-size-sm);
+}
+
+.tl-ago {
+  margin-left: 8px;
+  font-size: var(--font-size-sm);
+}
+
+.tl-num {
+  text-align: right;
+}
+
+.tl-services {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tl-more {
+  font-size: var(--font-size-sm);
+}
+
+.tl-error {
+  color: var(--error);
+}
+
+/* Header tabs double as the results-type switch (traces | events). */
+.tl-tabs {
+  display: flex;
+  gap: 2px;
+}
+.tl-tab {
+  background: none;
+  border: none;
+  padding: 2px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--speed) var(--ease), background var(--speed) var(--ease);
+}
+.tl-tab:hover {
+  color: var(--text-muted);
+}
+.tl-tab.active {
+  color: var(--accent-text);
+  background: var(--accent-bg);
+}
+
+.tl-event {
+  font-weight: 500;
+}
+.tl-service-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---------------------------------------------------------- sort control -- */
+
+/* Sits in the header, right-aligned alongside the refresh control. */
+.tl-sort-ctl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tl-control-label {
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  user-select: none;
+}
+.tl-sort {
+  width: 124px;
+}
+.tl-sort .sel-trigger {
+  height: 26px;
+}
+
+/* Per-row duration bar behind the value (longer = slower). */
+.tl-dur {
+  position: relative;
+}
+.tl-dur-bar {
+  position: absolute;
+  right: var(--pad);
+  top: 5px;
+  bottom: 5px;
+  background: var(--accent-bg);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+.tl-dur-val {
+  position: relative;
+}

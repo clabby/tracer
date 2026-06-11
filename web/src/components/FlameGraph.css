@@ -1,0 +1,322 @@
+/* FlameGraph — container layout, instance legend, hover tooltip. */
+
+.fg {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  outline: none;
+}
+
+/* ---------------------------------------------------------------- legend -- */
+
+.fg-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.fg-chip {
+  transition:
+    opacity var(--speed) var(--ease),
+    transform var(--speed) var(--ease),
+    border-color var(--speed) var(--ease),
+    background var(--speed) var(--ease),
+    color var(--speed) var(--ease);
+}
+.fg-chip:active {
+  transform: scale(0.94);
+}
+.fg-chip-hidden {
+  opacity: 0.4;
+}
+
+/* Sub-tree focus indicator / clear button. */
+.fg-focus-chip {
+  gap: 6px;
+}
+.fg-focus-label {
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+  opacity: 0.7;
+}
+.fg-focus-name {
+  font-family: var(--font-mono);
+  color: var(--accent-text);
+}
+
+/* Header above the legend: the root span being viewed + time metadata. */
+.fg-header {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 0 9px;
+  border-bottom: 1px solid var(--border);
+}
+.fg-header-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fg-header-meta {
+  font-size: var(--font-size-sm);
+  color: var(--text-faint);
+  white-space: nowrap;
+  user-select: none;
+}
+.fg-header-dot {
+  margin: 0 6px;
+  opacity: 0.6;
+}
+
+/* Select-all / deselect-all toggle, set apart from the colored service pills. */
+.fg-toggle-all {
+  color: var(--text-faint);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.04em;
+}
+.fg-toggle-all:hover {
+  color: var(--text);
+}
+
+/* Legend service-name badge: hard-cap width so a stray long name can't blow
+   out the row even with the 10-char text truncation. */
+.fg-chip-name {
+  max-width: 11ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------------------- controls -- */
+
+/* Slim display-options strip between the legend and the timeline. */
+.fg-controls {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+.fg-find {
+  height: 26px;
+  width: 220px;
+  max-width: 100%;
+}
+.fg-control-label {
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  user-select: none;
+}
+.fg-sort {
+  width: 148px;
+}
+.fg-sort .sel-trigger {
+  height: 26px;
+}
+
+/* -------------------------------------------------------------- timeline -- */
+
+/* Overview scrubber: a full-extent track with a draggable zoom window.
+   paddingLeft is set inline to the canvas gutter so the window lines up with
+   the bars below. */
+.fg-timeline {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.fg-timeline-label {
+  flex: none;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  user-select: none;
+}
+
+.fg-timeline-track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: crosshair;
+  overflow: hidden;
+}
+
+.fg-timeline-minimap {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.fg-timeline-window {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  min-width: 8px;
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-sm);
+  /* Scrim everything outside the window so the selected range stands out
+     without tinting the minimap inside it. Clipped by the track's overflow. */
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  cursor: grab;
+  transition: background var(--speed) var(--ease);
+}
+.fg-timeline-window:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.fg-timeline-window:active {
+  cursor: grabbing;
+}
+
+.fg-timeline-handle {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 11px;
+  cursor: ew-resize;
+}
+.fg-timeline-handle.left {
+  left: -7px;
+}
+.fg-timeline-handle.right {
+  right: -7px;
+}
+/* Visible grip: an accent pill with a dark contrast ring so it reads over any
+   minimap color. */
+.fg-timeline-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 22px;
+  transform: translate(-50%, -50%);
+  background: var(--accent);
+  border: 1px solid var(--bg);
+  border-radius: 3px;
+  box-shadow: var(--shadow);
+}
+.fg-timeline-handle:hover::after {
+  filter: brightness(1.15);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fg-timeline-window {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------- canvas -- */
+
+.fg-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--flame-bg);
+}
+
+.fg-canvas-wrap {
+  position: relative;
+}
+
+.fg-canvas {
+  display: block;
+}
+
+/* --------------------------------------------------------------- tooltip -- */
+
+.fg-tooltip {
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+  min-width: 190px;
+  max-width: 280px;
+  padding: 8px 10px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+
+.fg-tooltip-name {
+  color: var(--text);
+  margin-bottom: 5px;
+  word-break: break-all;
+}
+
+.fg-tooltip-kind {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  vertical-align: 1px;
+}
+
+.fg-tooltip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  color: var(--text-muted);
+}
+
+.fg-tooltip-label {
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.fg-tooltip-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+
+/* ---------------------------------------------------------------- motion -- */
+
+@media (prefers-reduced-motion: reduce) {
+  .fg-chip {
+    transition: none;
+  }
+  .fg-chip:active {
+    transform: none;
+  }
+}

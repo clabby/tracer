@@ -1,0 +1,218 @@
+/* SearchPanel — left sidebar with stacked filter sections. */
+
+.sp {
+  /* Width comes from the parent grid track (.app-search) so the gap to the
+     trace table equals the page gutter. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sp-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--pad);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sp-section > .label {
+  margin-bottom: 0;
+}
+
+.sp-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sp-grow {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ----------------------------------------------------------------- chips -- */
+
+.sp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sp .chip {
+  appearance: none;
+}
+/* Subtle scale pop when a chip toggles on (transform only). */
+.sp .chip.active {
+  animation: sp-chip-pop var(--speed) var(--ease);
+}
+@keyframes sp-chip-pop {
+  from {
+    transform: scale(0.92);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.sp-service-chip {
+  color: var(--text);
+  cursor: default;
+}
+
+/* Bare × button inside chips. */
+.sp-chip-x {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  line-height: 1;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* Level chips keep their level color, active or not. */
+.sp-levels .sp-level-chip.level-trace { color: var(--level-trace); }
+.sp-levels .sp-level-chip.level-debug { color: var(--level-debug); }
+.sp-levels .sp-level-chip.level-info { color: var(--level-info); }
+.sp-levels .sp-level-chip.level-warn { color: var(--level-warn); }
+.sp-levels .sp-level-chip.level-error { color: var(--level-error); }
+.sp-levels .sp-level-chip.active {
+  background: var(--surface-raised);
+  border-color: currentColor;
+}
+
+/* -------------------------------------------------------------- duration -- */
+
+.sp .input[aria-invalid='true'] {
+  border-color: var(--error);
+}
+.sp .input[aria-invalid='true']:focus {
+  border-color: var(--error);
+  box-shadow: 0 0 0 3px var(--error-bg);
+}
+
+/* ------------------------------------------------------------ attributes -- */
+
+.sp-attrs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Two-line grid: [scope][key][×] / [op][value][ ]. */
+.sp-attr {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr) 24px;
+  gap: 6px;
+  align-items: center;
+}
+.sp-attr .sp-select {
+  min-width: 0;
+  padding: 0 6px;
+}
+.sp-attr-x {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  justify-content: center;
+  color: var(--text-faint);
+}
+.sp-attr-x:hover {
+  color: var(--text);
+}
+.sp-add-attr {
+  align-self: flex-start;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------- options -- */
+
+.sp-options {
+  justify-content: flex-start;
+}
+.sp-limit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+}
+.sp-limit-input {
+  width: 64px;
+  padding: 0 6px;
+}
+
+/* ----------------------------------------------------------------- query -- */
+
+.sp-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sp-section-head .label {
+  margin-bottom: 0;
+}
+
+.sp-query {
+  display: block;
+  padding: 8px 10px;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.sp-raw {
+  width: 100%;
+  height: auto;
+  min-height: 88px;
+  padding: 8px 10px;
+  resize: vertical;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height);
+}
+
+.sp-raw-warn {
+  align-self: flex-start;
+  color: var(--warn);
+  border-color: var(--warn);
+  background: transparent;
+  cursor: default;
+}
+.sp-raw-warn:hover {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+/* ---------------------------------------------------------------- footer -- */
+
+.sp-footer {
+  padding: var(--pad);
+  border-top: 1px solid var(--border);
+}
+.sp-search {
+  width: 100%;
+  justify-content: center;
+}
+.sp-search .spinner {
+  width: 12px;
+  height: 12px;
+  border-color: var(--accent-bg);
+  border-top-color: currentColor;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sp .chip.active {
+    animation: none;
+  }
+}
