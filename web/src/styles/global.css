@@ -187,6 +187,18 @@ select.input {
   flex: none;
 }
 
+/* Instance/service name: cap width and ellipsize. Long service.instance.id
+   values would otherwise overflow tooltips and table cells. Pair with a
+   `title` for the full value. */
+.inst-name {
+  display: inline-block;
+  max-width: 20ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
 /* ---------------------------------------------------------------- panels -- */
 
 .panel {

@@ -132,7 +132,9 @@ export default function SpanStats({ model }: SpanStatsProps) {
                           background: instanceColorVar(colorIndexForService(instName(r.straggler))),
                         }}
                       />
-                      {instName(r.straggler)}
+                      <span className="inst-name" title={instName(r.straggler)}>
+                        {instName(r.straggler)}
+                      </span>
                       {r.skewNs > 0 && (
                         <span className="faint mono-num"> +{formatNs(r.skewNs)}</span>
                       )}

@@ -1565,7 +1565,14 @@ export default function FlameGraph(props: FlameGraphProps) {
                       background: instanceColorVar(tipInst ? tipInst.colorIndex : 0),
                     }}
                   />
-                  {tipInst ? tipInst.serviceName : tip.instanceId}
+                  {(() => {
+                    const n = tipInst ? tipInst.serviceName : tip.instanceId
+                    return (
+                      <span className="inst-name" title={n}>
+                        {n}
+                      </span>
+                    )
+                  })()}
                 </span>
               </div>
               {tip.kind === 'span' && (

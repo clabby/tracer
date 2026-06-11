@@ -162,9 +162,15 @@ export default function EventsView({
                             ),
                           }}
                         />
-                        {instance !== undefined
-                          ? instance.serviceName
-                          : ev.instanceId}
+                        {(() => {
+                          const n =
+                            instance !== undefined ? instance.serviceName : ev.instanceId
+                          return (
+                            <span className="inst-name" title={n}>
+                              {n}
+                            </span>
+                          )
+                        })()}
                       </span>
                     </td>
                     <td className="ev-attrs faint">

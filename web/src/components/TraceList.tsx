@@ -123,7 +123,9 @@ function EventRow({
               background: instanceColorVar(colorIndexForService(event.serviceName)),
             }}
           />
-          {event.serviceName}
+          <span className="inst-name" title={event.serviceName}>
+            {event.serviceName}
+          </span>
         </span>
       </td>
       <td className="tl-num mono-num">{formatNs(event.spanDurationNs)}</td>
