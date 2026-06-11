@@ -60,13 +60,24 @@ const TEMPO_BASE = '/tempo'
 export default function App() {
   const [route, navigate] = useRoute()
 
-  const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem('tracer.theme') as Theme) ?? 'dark',
+  // The theme defaults to the OS preference and tracks it live. The toolbar
+  // toggle is an in-memory override only — never persisted, and reset by the
+  // next OS theme change.
+  const [theme, setTheme] = useState<Theme>(() =>
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light',
   )
   useEffect(() => {
     document.documentElement.dataset.theme = theme
-    localStorage.setItem('tracer.theme', theme)
   }, [theme])
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const onChange = (e: MediaQueryListEvent) =>
+      setTheme(e.matches ? 'dark' : 'light')
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
 
   // The Tempo endpoint is fixed at the relative /tempo path; the deployment
   // (Caddy's TEMPO_URL, or the dev Vite proxy) decides where that points.
