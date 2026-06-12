@@ -10,7 +10,7 @@
  * - root order per instance, and the globally time-sorted events list.
  */
 
-import type { Instance, SpanNode, TraceModel } from './model'
+import type { AggregateNode, Instance, SpanNode, TraceModel } from './model'
 
 /** A span without object references: children become an id list. */
 export type WireSpan = Omit<SpanNode, 'children'> & {
@@ -133,4 +133,92 @@ export function hydrateTrace(wire: WireTrace): TraceModel {
     events,
     warnings: [...wire.warnings],
   }
+}
+
+// ------------------------------------------------------- aggregate (wire) --
+
+/** Duration stats for one instance's spans under one aggregate path. */
+export interface WireAggregateInstanceStats {
+  count: number
+  minNs: number
+  maxNs: number
+  meanNs: number
+  totalNs: number
+  /** Spans with status `error` from this instance at this path. */
+  errorCount: number
+}
+
+/**
+ * One node of the merged flame tree, flattened for the wire: nesting is
+ * encoded by `path` (span names root → node) instead of object children, so
+ * the response is a flat pre-order list with no recursion.
+ */
+export interface WireAggregateNode {
+  /** Span names from root to this node; `path.length === depth + 1`. */
+  path: string[]
+  name: string
+  depth: number
+  /** Spans matching this path across all included instances. */
+  count: number
+  minNs: number
+  maxNs: number
+  meanNs: number
+  totalNs: number
+  /** instanceId → duration stats for that instance's spans at this path. */
+  perInstance: Record<string, WireAggregateInstanceStats>
+  /** instanceId → matching span ids; present only when requested. */
+  spanIds?: Record<string, string[]>
+}
+
+/**
+ * Flatten a merged flame tree (from `buildAggregateTree`) to a pre-order
+ * list of wire nodes with per-instance duration/error stats.
+ */
+export function flattenAggregate(root: AggregateNode, includeSpanIds = false): WireAggregateNode[] {
+  const out: WireAggregateNode[] = []
+  const visit = (node: AggregateNode, path: string[]): void => {
+    const perInstance: Record<string, WireAggregateInstanceStats> = {}
+    for (const [instanceId, spans] of node.spans) {
+      let min = Infinity
+      let max = -Infinity
+      let total = 0
+      let errorCount = 0
+      for (const s of spans) {
+        const d = s.durationNs
+        if (d < min) min = d
+        if (d > max) max = d
+        total += d
+        if (s.status === 'error') errorCount++
+      }
+      perInstance[instanceId] = {
+        count: spans.length,
+        minNs: spans.length > 0 ? min : 0,
+        maxNs: spans.length > 0 ? max : 0,
+        meanNs: spans.length > 0 ? total / spans.length : 0,
+        totalNs: total,
+        errorCount,
+      }
+    }
+    const wireNode: WireAggregateNode = {
+      path,
+      name: node.name,
+      depth: node.depth,
+      count: node.count,
+      minNs: node.minNs,
+      maxNs: node.maxNs,
+      meanNs: node.meanNs,
+      totalNs: node.totalNs,
+      perInstance,
+    }
+    if (includeSpanIds) {
+      wireNode.spanIds = Object.fromEntries(
+        [...node.spans].map(([id, spans]) => [id, spans.map((s) => s.spanId)]),
+      )
+    }
+    out.push(wireNode)
+    for (const c of node.children) visit(c, [...path, c.name])
+  }
+  // The synthetic root (depth -1) is layout scaffolding, not data — skip it.
+  for (const c of root.children) visit(c, [c.name])
+  return out
 }
