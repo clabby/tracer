@@ -24,9 +24,11 @@ const BODY_EXCERPT_CHARS = 256
 
 export class TempoClient implements ITempoClient {
   readonly baseUrl: string
+  private readonly timeoutMs: number
 
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string, timeoutMs: number = TIMEOUT_MS) {
     this.baseUrl = baseUrl.replace(/\/+$/, '')
+    this.timeoutMs = timeoutMs
   }
 
   // ------------------------------------------------------------- transport --
@@ -35,7 +37,7 @@ export class TempoClient implements ITempoClient {
     const url = `${this.baseUrl}${path}`
     let res: Response
     try {
-      res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) })
+      res = await fetch(url, { signal: AbortSignal.timeout(this.timeoutMs) })
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err)
       throw new Error(`GET ${url} failed: ${detail}`)

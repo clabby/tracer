@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:api": "TEMPO_URL=${TEMPO_URL:-localhost:3200} PORT=7777 bun run --watch server/index.ts",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "bun test src",
+    "test": "bun test src server",
     "check": "tsc --noEmit"
   },
   "dependencies": {
