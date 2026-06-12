@@ -37,11 +37,11 @@ export class TempoClient implements ITempoClient {
 
   // ------------------------------------------------------------- transport --
 
-  private async request(path: string): Promise<Response> {
+  private async request(path: string, timeoutMs: number = this.timeoutMs): Promise<Response> {
     const url = `${this.baseUrl}${path}`
     let res: Response
     try {
-      res = await fetch(url, { signal: AbortSignal.timeout(this.timeoutMs) })
+      res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err)
       throw new Error(`GET ${url} failed: ${detail}`)
@@ -58,14 +58,25 @@ export class TempoClient implements ITempoClient {
     return res
   }
 
-  private async getJson(path: string): Promise<unknown> {
-    const res = await this.request(path)
+  private async getJson(path: string, timeoutMs: number = this.timeoutMs): Promise<unknown> {
+    const res = await this.request(path, timeoutMs)
     try {
       return await res.json()
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err)
       throw new Error(`GET ${this.baseUrl}${path} returned invalid JSON: ${detail}`)
     }
+  }
+
+  /**
+   * Remaining budget for a v1 fallback attempt: the v2→v1 fallbacks must
+   * share ONE deadline, not stack two full timeouts — callers above us (the
+   * API server's 12s budget under the SPA's 15s) rely on the total. Returns
+   * null when the budget is already spent (rethrow the original error).
+   */
+  private remainingBudget(deadline: number): number | null {
+    const remaining = deadline - Date.now()
+    return remaining > 50 ? remaining : null
   }
 
   // ---------------------------------------------------------------- search --
@@ -174,11 +185,14 @@ export class TempoClient implements ITempoClient {
 
   async fetchTrace(traceId: string): Promise<TraceModel> {
     const id = encodeURIComponent(traceId)
+    const deadline = Date.now() + this.timeoutMs
     let raw: unknown
     try {
       raw = await this.getJson(`/api/v2/traces/${id}`)
-    } catch {
-      raw = await this.getJson(`/api/traces/${id}`)
+    } catch (err) {
+      const remaining = this.remainingBudget(deadline)
+      if (remaining === null) throw err
+      raw = await this.getJson(`/api/traces/${id}`, remaining)
     }
     return parseTrace(raw, traceId)
   }
@@ -208,13 +222,18 @@ export class TempoClient implements ITempoClient {
     // queried bare, attributes get a scope prefix.
     const fullTag =
       tag === 'name' ? (scope === 'event' ? 'event:name' : 'name') : `${scope}.${tag}`
+    const deadline = Date.now() + this.timeoutMs
     let values: string[]
     try {
       values = valuesFromV2(await this.getJson(`/api/v2/search/tag/${encodeURIComponent(fullTag)}/values`))
-    } catch {
+    } catch (err) {
       // The v1 endpoint takes unscoped tag names (e.g. `service.name`, not
       // `resource.service.name`); the intrinsic 'name' is already unscoped.
-      values = valuesFromV1(await this.getJson(`/api/search/tag/${encodeURIComponent(tag)}/values`))
+      const remaining = this.remainingBudget(deadline)
+      if (remaining === null) throw err
+      values = valuesFromV1(
+        await this.getJson(`/api/search/tag/${encodeURIComponent(tag)}/values`, remaining),
+      )
     }
     return dedupSortFilter(values, q)
   }

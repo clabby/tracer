@@ -15,23 +15,34 @@ import { json, type Deps } from './router'
 
 const CACHE_TTL_MS = 15_000
 const CACHE_MAX = 16
-const CACHE_CONTROL = { 'cache-control': 'public, max-age=15' }
 
 const cache = new Map<string, { model: TraceModel; at: number }>()
 
-async function loadTrace(rawId: string, deps: Deps): Promise<TraceModel> {
+async function loadTrace(rawId: string, deps: Deps): Promise<{ model: TraceModel; at: number }> {
   const traceId = rawId.toLowerCase()
   const hit = cache.get(traceId)
-  if (hit !== undefined && Date.now() - hit.at < CACHE_TTL_MS) return hit.model
-  const model = await deps.tempo.fetchTrace(traceId)
+  if (hit !== undefined && Date.now() - hit.at < CACHE_TTL_MS) return hit
+  const entry = { model: await deps.tempo.fetchTrace(traceId), at: Date.now() }
   cache.delete(traceId)
-  cache.set(traceId, { model, at: Date.now() })
+  cache.set(traceId, entry)
   while (cache.size > CACHE_MAX) {
     const oldest = cache.keys().next().value
     if (oldest === undefined) break
     cache.delete(oldest)
   }
-  return model
+  return entry
+}
+
+/**
+ * `max-age=15` plus an honest Age header — without it, a response served
+ * from a 14s-old cache entry would restart the browser's 15s freshness
+ * window and stack total staleness to ~30s.
+ */
+function cacheHeaders(at: number): Record<string, string> {
+  return {
+    'cache-control': 'public, max-age=15',
+    age: String(Math.max(0, Math.floor((Date.now() - at) / 1000))),
+  }
 }
 
 /** Visible for tests: drop cached parses. */
@@ -75,21 +86,58 @@ function rejectUnknownParams(url: URL, known: readonly string[]): void {
 
 // ------------------------------------------------------------------ trace --
 
-/** Scope a wire trace to a subset of instances, severing cross-links. */
+/**
+ * Scope a wire trace to a subset of instances. Cross-instance links are
+ * truly severed in BOTH directions: child links to excluded spans are
+ * dropped, and kept spans whose parent left with another instance are
+ * promoted to instance roots (parentSpanId nulled, depths recomputed) —
+ * the same orphan handling the parser applies — so the tree encoding stays
+ * a complete forest over the returned spans.
+ */
 export function scopeWireTrace(wire: WireTrace, instanceIds: string[]): WireTrace {
   if (instanceIds.length === 0) return wire
   const keepInstances = new Set(instanceIds)
-  const instances = wire.instances.filter((i) => keepInstances.has(i.id))
-  const spans = wire.spans.filter((s) => keepInstances.has(s.instanceId))
-  const keptSpanIds = new Set(spans.map((s) => s.spanId))
-  return {
-    ...wire,
-    instances,
-    spans: spans.map((s) => ({
+  const keptSpanIds = new Set(
+    wire.spans.filter((s) => keepInstances.has(s.instanceId)).map((s) => s.spanId),
+  )
+
+  const spans = wire.spans
+    .filter((s) => keepInstances.has(s.instanceId))
+    .map((s) => ({
       ...s,
+      parentSpanId: s.parentSpanId !== null && keptSpanIds.has(s.parentSpanId) ? s.parentSpanId : null,
       childSpanIds: s.childSpanIds.filter((id) => keptSpanIds.has(id)),
-    })),
+    }))
+
+  // Recompute depths from the (possibly promoted) roots.
+  const byId = new Map(spans.map((s) => [s.spanId, s]))
+  const queue = spans.filter((s) => s.parentSpanId === null)
+  for (const r of queue) r.depth = 0
+  for (let i = 0; i < queue.length; i++) {
+    const n = queue[i]
+    for (const id of n.childSpanIds) {
+      const child = byId.get(id)
+      if (child === undefined) continue
+      child.depth = n.depth + 1
+      queue.push(child)
+    }
   }
+
+  const instances = wire.instances
+    .filter((i) => keepInstances.has(i.id))
+    .map((i) => {
+      const mine = spans.filter((s) => s.instanceId === i.id)
+      const roots = mine.filter((s) => s.parentSpanId === null)
+      // Parser contract: instance roots in start-time order.
+      roots.sort((a, b) => a.startNs - b.startNs)
+      return {
+        ...i,
+        rootSpanIds: roots.map((s) => s.spanId),
+        maxDepth: mine.reduce((d, s) => Math.max(d, s.depth), 0),
+      }
+    })
+
+  return { ...wire, instances, spans }
 }
 
 export async function handleTrace(
@@ -99,10 +147,10 @@ export async function handleTrace(
   deps: Deps,
 ): Promise<Response> {
   rejectUnknownParams(url, ['instance'])
-  const model = await loadTrace(params.traceId, deps)
+  const { model, at } = await loadTrace(params.traceId, deps)
   const selected = selectedInstances(url, model)
   const body: WireTrace = scopeWireTrace(serializeTrace(model), selected)
-  return json(body, 200, CACHE_CONTROL)
+  return json(body, 200, cacheHeaders(at))
 }
 
 // ---------------------------------------------------------------- summary --
@@ -114,7 +162,7 @@ export async function handleTraceSummary(
   deps: Deps,
 ): Promise<Response> {
   rejectUnknownParams(url, [])
-  const model = await loadTrace(params.traceId, deps)
+  const { model, at } = await loadTrace(params.traceId, deps)
   const wire = serializeTrace(model)
   const body: TraceOverview = {
     traceId: wire.traceId,
@@ -125,7 +173,7 @@ export async function handleTraceSummary(
     instances: wire.instances,
     warnings: wire.warnings,
   }
-  return json(body, 200, CACHE_CONTROL)
+  return json(body, 200, cacheHeaders(at))
 }
 
 // -------------------------------------------------------------- aggregate --
@@ -137,7 +185,7 @@ export async function handleTraceAggregate(
   deps: Deps,
 ): Promise<Response> {
   rejectUnknownParams(url, ['instance', 'spanIds'])
-  const model = await loadTrace(params.traceId, deps)
+  const { model, at } = await loadTrace(params.traceId, deps)
   const selected = selectedInstances(url, model)
 
   const spanIdsRaw = url.searchParams.get('spanIds')
@@ -157,5 +205,5 @@ export async function handleTraceAggregate(
     instances: included,
     nodes: flattenAggregate(buildAggregateTree(model, hidden), spanIdsRaw === 'true'),
   }
-  return json(body, 200, CACHE_CONTROL)
+  return json(body, 200, cacheHeaders(at))
 }

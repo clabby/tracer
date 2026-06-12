@@ -55,11 +55,14 @@ ${routeLines}
 
 ## Recipes
 
+\`$BASE\` is the deployment origin, e.g. \`http://localhost:8080\` —
+\`export BASE=http://localhost:8080\` and the commands below run as-is.
+
 ### Which node was slow in recent rounds?
 
 \`\`\`sh
 # 1. find recent traces (newest first)
-curl -s '$BASE/api/v1/search/traces?since=15m&limit=5'
+curl -s "$BASE/api/v1/search/traces?since=15m&limit=5"
 # 2. pre-flight one trace: per-instance durations + error counts, no spans
 curl -s "$BASE/api/v1/traces/$TRACE_ID/summary"
 # 3. compare the same code path across nodes: per-instance stats per path
@@ -70,8 +73,8 @@ curl -s "$BASE/api/v1/traces/$TRACE_ID/aggregate"
 ### Chase errors
 
 \`\`\`sh
-curl -s '$BASE/api/v1/search/traces?errorsOnly=true&since=1h&limit=10'
-curl -s '$BASE/api/v1/search/events?level=error&since=1h'
+curl -s "$BASE/api/v1/search/traces?errorsOnly=true&since=1h&limit=10"
+curl -s "$BASE/api/v1/search/events?level=error&since=1h"
 # then drill into a specific instance's spans only:
 curl -s "$BASE/api/v1/traces/$TRACE_ID?instance=node-2"
 \`\`\`
@@ -80,12 +83,12 @@ curl -s "$BASE/api/v1/traces/$TRACE_ID?instance=node-2"
 
 \`\`\`sh
 # discover the attribute space
-curl -s '$BASE/api/v1/tags/span'
-curl -s '$BASE/api/v1/tags/resource/service.name/values'
+curl -s "$BASE/api/v1/tags/span"
+curl -s "$BASE/api/v1/tags/resource/service.name/values"
 # compile WITHOUT executing to check a filter
-curl -s '$BASE/api/v1/traceql/compile?attr=span.view%3D5&minDuration=100ms'
+curl -s "$BASE/api/v1/traceql/compile?attr=span.view%3D5&minDuration=100ms"
 # then run it
-curl -s '$BASE/api/v1/search/traces?attr=span.view%3D5&minDuration=100ms&since=1h'
+curl -s "$BASE/api/v1/search/traces?attr=span.view%3D5&minDuration=100ms&since=1h"
 \`\`\`
 
 ### Full trace, when rollups are not enough

@@ -202,10 +202,12 @@ function parseRangeParams(
   if (from !== null || to !== null) {
     const f = Number(from)
     const t = Number(to)
-    if (from === null || to === null || !Number.isFinite(f) || !Number.isFinite(t) || f >= t) {
+    // from === to is a degenerate-but-legal empty window (the UI can produce
+    // it via sub-second custom ranges) — it searches nothing, not a 400.
+    if (from === null || to === null || !Number.isFinite(f) || !Number.isFinite(t) || f > t) {
       errors.push({
         name: 'from',
-        reason: '`from` and `to` must both be set, unix SECONDS, with from < to',
+        reason: '`from` and `to` must both be set, unix SECONDS, with from <= to',
         example: 'from=1765400000&to=1765403600',
       })
       return resolveRange({ kind: 'relative', seconds: DEFAULT_RANGE_SECONDS }, now)
@@ -331,6 +333,7 @@ function parseAttrObjects(raw: unknown, errors: InvalidParam[]): AttrFilter[] {
     return []
   }
   const out: AttrFilter[] = []
+  const KNOWN_ATTR_KEYS = ['id', 'scope', 'key', 'op', 'value']
   for (const [i, entry] of raw.entries()) {
     const name = `filter.attrs[${i}]`
     if (entry === null || typeof entry !== 'object') {
@@ -338,6 +341,11 @@ function parseAttrObjects(raw: unknown, errors: InvalidParam[]): AttrFilter[] {
       continue
     }
     const a = entry as Record<string, unknown>
+    for (const k of Object.keys(a)) {
+      if (!KNOWN_ATTR_KEYS.includes(k)) {
+        errors.push({ name: `${name}.${k}`, reason: `unknown attr field — known: ${KNOWN_ATTR_KEYS.join(', ')}` })
+      }
+    }
     const scope = a.scope
     const op = a.op
     if (!SCOPES.includes(scope as (typeof SCOPES)[number])) {
@@ -403,11 +411,11 @@ function parseRangeObject(raw: unknown, errors: InvalidParam[]): TimeRange {
       typeof r.to !== 'number' ||
       !Number.isFinite(r.from) ||
       !Number.isFinite(r.to) ||
-      r.from >= r.to
+      r.from > r.to
     ) {
       errors.push({
         name: 'range.from',
-        reason: 'range.from and range.to must both be unix SECONDS with from < to',
+        reason: 'range.from and range.to must both be unix SECONDS with from <= to',
         example: '{"from": 1765400000, "to": 1765403600}',
       })
       return resolveRange({ kind: 'relative', seconds: DEFAULT_RANGE_SECONDS }, now)

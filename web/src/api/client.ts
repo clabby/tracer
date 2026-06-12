@@ -17,6 +17,7 @@ import type {
   TraceModel,
   TraceSummary,
 } from '../lib/model'
+import { parseDurationInput } from '../lib/format'
 import { hydrateTrace, type WireTrace } from '../lib/wire'
 import type {
   ApiProblem,
@@ -28,6 +29,22 @@ import type {
 
 const TIMEOUT_MS = 15_000
 const BODY_EXCERPT_CHARS = 256
+
+/**
+ * Drop draft-state noise before POSTing, mirroring `buildTraceQL`'s
+ * tolerance: it skips attrs with blank keys and unparseable durations, so
+ * searches that ran under the old in-browser compiler (e.g. an un-filled
+ * "+ attribute" row, or "150" typed before its unit) must keep running —
+ * the server's strict validation is for API callers, not UI drafts.
+ */
+export function sanitizeFilter(filter: FilterState): FilterState {
+  return {
+    ...filter,
+    attrs: filter.attrs.filter((a) => a.key.trim() !== ''),
+    minDuration: parseDurationInput(filter.minDuration) !== null ? filter.minDuration : '',
+    maxDuration: parseDurationInput(filter.maxDuration) !== null ? filter.maxDuration : '',
+  }
+}
 
 export class ApiClient implements ITempoClient {
   readonly baseUrl: string
@@ -61,6 +78,10 @@ export class ApiClient implements ITempoClient {
         try {
           const p = JSON.parse(text) as ApiProblem
           detail = p.detail ?? ''
+          // Per-field validation failures are the actionable part of a 400.
+          if (p.invalidParams !== undefined && p.invalidParams.length > 0) {
+            detail += ` (${p.invalidParams.map((ip) => `${ip.name}: ${ip.reason}`).join('; ')})`
+          }
         } catch {
           detail = text.trim().slice(0, BODY_EXCERPT_CHARS)
         }
@@ -81,7 +102,7 @@ export class ApiClient implements ITempoClient {
 
   async searchTraces(filter: FilterState, range: TimeRange): Promise<TraceSummary[]> {
     const data = (await this.request('POST', '/search/traces', {
-      filter,
+      filter: sanitizeFilter(filter),
       range: { from: range.from, to: range.to },
     })) as SearchTracesResponse
     return data.traces
@@ -89,7 +110,7 @@ export class ApiClient implements ITempoClient {
 
   async searchEvents(filter: FilterState, range: TimeRange): Promise<EventSummary[]> {
     const data = (await this.request('POST', '/search/events', {
-      filter,
+      filter: sanitizeFilter(filter),
       range: { from: range.from, to: range.to },
     })) as SearchEventsResponse
     return data.events

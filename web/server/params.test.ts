@@ -84,6 +84,13 @@ describe('parseSearchQuery: range', () => {
     expect(range).toEqual({ from: 1765400000, to: 1765403600 })
   })
 
+  test('degenerate from == to is accepted (empty window, not a 400)', () => {
+    const { range } = parseSearchQuery(u('from=1765400000&to=1765400000'))
+    expect(range).toEqual({ from: 1765400000, to: 1765400000 })
+    const { range: r2 } = parseSearchBody({ range: { from: 1765400000, to: 1765400000 } })
+    expect(r2).toEqual({ from: 1765400000, to: 1765400000 })
+  })
+
   test('since + from is rejected', async () => {
     const p = await expectProblem(() => parseSearchQuery(u('since=15m&from=1765400000&to=1765403600')))
     expect(p.invalidParams?.[0].name).toBe('since')
@@ -140,6 +147,15 @@ describe('parseSearchBody', () => {
       parseSearchBody({ bogus: 1, filter: { nope: true }, range: { last: 900 } }),
     )
     expect(p.invalidParams?.map((i) => i.name).sort()).toEqual(['bogus', 'filter.nope', 'range.last'])
+  })
+
+  test('unknown attr-object keys are rejected (additionalProperties: false)', async () => {
+    const p = await expectProblem(() =>
+      parseSearchBody({
+        filter: { attrs: [{ scope: 'span', key: 'view', op: '=', value: '5', bogus: 1 }] },
+      }),
+    )
+    expect(p.invalidParams?.[0].name).toBe('filter.attrs[0].bogus')
   })
 
   test('lastSeconds + from/to rejected; bad attrs rejected per index', async () => {

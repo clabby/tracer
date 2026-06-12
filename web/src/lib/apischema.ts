@@ -282,18 +282,30 @@ export const eventSummarySchema = {
 
 // ---------------------------------------------------------------- filters --
 
+const attrFilterProperties = {
+  id: { type: 'string', description: 'Client-local id (any string; used for list keys).' },
+  scope: { description: 'Attribute scope.', enum: ['span', 'resource', 'event'] },
+  key: { type: 'string', description: 'Attribute key, e.g. `view` or `service.name`.' },
+  op: { description: 'TraceQL comparison operator.', enum: ['=', '!=', '=~', '!~', '>', '<', '>=', '<='] },
+  value: { type: 'string', description: 'Comparison value (numbers/bools as strings).' },
+} as const
+
 export const attrFilterSchema = {
   description: 'One attribute predicate.',
   type: 'object',
   additionalProperties: false,
-  properties: {
-    id: { type: 'string', description: 'Client-local id (any string; used for list keys).' },
-    scope: { description: 'Attribute scope.', enum: ['span', 'resource', 'event'] },
-    key: { type: 'string', description: 'Attribute key, e.g. `view` or `service.name`.' },
-    op: { description: 'TraceQL comparison operator.', enum: ['=', '!=', '=~', '!~', '>', '<', '>=', '<='] },
-    value: { type: 'string', description: 'Comparison value (numbers/bools as strings).' },
-  },
+  properties: attrFilterProperties,
   required: ['id', 'scope', 'key', 'op', 'value'],
+} as const
+
+/** Input variant: `id` is a client-local row key, optional on the way in
+ * (the server fills a default) — matches the API's own corrected examples. */
+export const attrFilterInputSchema = {
+  description: 'One attribute predicate. `id` is optional on input.',
+  type: 'object',
+  additionalProperties: false,
+  properties: attrFilterProperties,
+  required: ['scope', 'key', 'op', 'value'],
 } as const
 
 const filterProperties = {
@@ -345,11 +357,21 @@ export const filterStateSchema = {
   ],
 } as const
 
+/** Same properties, but accepting the input form of attrs (optional id). */
+const filterInputProperties = {
+  ...filterProperties,
+  attrs: {
+    type: 'array',
+    description: 'Attribute predicates, ANDed. `id` is optional on input.',
+    items: attrFilterInputSchema,
+  },
+} as const
+
 export const partialFilterSchema = {
   description: 'A search filter; omitted fields take their defaults.',
   type: 'object',
   additionalProperties: false,
-  properties: filterProperties,
+  properties: filterInputProperties,
 } as const
 
 export const timeRangeSchema = {
@@ -650,6 +672,11 @@ export type ApiProblem = FromSchema<typeof problemSchema>
 type Eq<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
 type Expect<T extends true> = T
 
+/** The input form of an attr predicate (optional client-local id). */
+type AttrFilterInput = Omit<AttrFilter, 'id'> & { id?: string }
+/** The input form of a filter: partial, with input-form attrs. */
+type FilterInput = Partial<Omit<FilterState, 'attrs'> & { attrs: AttrFilterInput[] }>
+
 /** Compile-time only; never instantiated. Each entry errors on drift. */
 export type SchemaDriftChecks = [
   Expect<Eq<FromSchema<typeof levelSchema>, Level>>,
@@ -661,8 +688,9 @@ export type SchemaDriftChecks = [
   Expect<Eq<FromSchema<typeof traceSummarySchema>, TraceSummary>>,
   Expect<Eq<FromSchema<typeof eventSummarySchema>, EventSummary>>,
   Expect<Eq<FromSchema<typeof attrFilterSchema>, AttrFilter>>,
+  Expect<Eq<FromSchema<typeof attrFilterInputSchema>, AttrFilterInput>>,
   Expect<Eq<FromSchema<typeof filterStateSchema>, FilterState>>,
-  Expect<Eq<FromSchema<typeof partialFilterSchema>, Partial<FilterState>>>,
+  Expect<Eq<FromSchema<typeof partialFilterSchema>, FilterInput>>,
   Expect<Eq<FromSchema<typeof timeRangeSchema>, TimeRange>>,
   Expect<Eq<FromSchema<typeof aggregateInstanceStatsSchema>, WireAggregateInstanceStats>>,
   Expect<Eq<FromSchema<typeof aggregateNodeSchema>, WireAggregateNode>>,

@@ -33,7 +33,8 @@ EXPOSE 8080
 USER bun
 
 # Liveness only (/api/v1 is static) — Tempo reachability is /api/v1/health.
+# The probe reads PORT so an overridden listen port stays healthy.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
-  CMD ["bun", "-e", "const r = await fetch('http://localhost:8080/api/v1'); if (!r.ok) process.exit(1)"]
+  CMD ["bun", "-e", "const r = await fetch(`http://localhost:${process.env.PORT ?? 8080}/api/v1`); if (!r.ok) process.exit(1)"]
 
 ENTRYPOINT ["bun", "server/index.ts"]

@@ -125,6 +125,31 @@ describe('handleTrace', () => {
     expect(body.spans[0].childSpanIds).toEqual([])
   })
 
+  test('?instance= promotes spans whose parent left with another instance', async () => {
+    // node-2's verify is parented under node-1's root; scoping to node-2
+    // must promote it to a root, not strand it with a dangling parent.
+    const { body } = await get<WireTrace>(
+      handleTrace,
+      `/api/v1/traces/${TRACE_HEX}?instance=node-2`,
+      { traceId: TRACE_HEX },
+    )
+    expect(body.instances.map((i) => i.id)).toEqual(['node-2'])
+    const verify = body.spans.find((s) => s.spanId === 'bbbbbbbbbbbb0002')!
+    expect(verify.parentSpanId).toBeNull()
+    expect(verify.depth).toBe(0)
+    // promoted into rootSpanIds, in startNs order (round @100 < verify @150)
+    expect(body.instances[0].rootSpanIds).toEqual(['aaaaaaaaaaaa0002', 'bbbbbbbbbbbb0002'])
+    expect(body.instances[0].maxDepth).toBe(0)
+    // every span is reachable from rootSpanIds via childSpanIds
+    const reachable = new Set<string>()
+    const walk = (id: string): void => {
+      reachable.add(id)
+      body.spans.find((s) => s.spanId === id)!.childSpanIds.forEach(walk)
+    }
+    for (const i of body.instances) i.rootSpanIds.forEach(walk)
+    expect([...reachable].sort()).toEqual(body.spans.map((s) => s.spanId).sort())
+  })
+
   test('unknown ?instance= 400s naming the valid ids', async () => {
     const url = new URL(`http://x/api/v1/traces/${TRACE_HEX}?instance=node-9`)
     try {
@@ -139,15 +164,19 @@ describe('handleTrace', () => {
     }
   })
 
-  test('the TTL cache absorbs repeat loads (one Tempo fetch)', async () => {
+  test('the TTL cache absorbs repeat loads (one Tempo fetch) and reports Age', async () => {
     await get<WireTrace>(handleTrace, `/api/v1/traces/${TRACE_HEX}`, { traceId: TRACE_HEX })
-    await get<TraceOverview>(handleTraceSummary, `/api/v1/traces/${TRACE_HEX}/summary`, {
-      traceId: TRACE_HEX,
-    })
+    const { headers } = await get<TraceOverview>(
+      handleTraceSummary,
+      `/api/v1/traces/${TRACE_HEX}/summary`,
+      { traceId: TRACE_HEX },
+    )
     await get<AggregateResponse>(handleTraceAggregate, `/api/v1/traces/${TRACE_HEX}/aggregate`, {
       traceId: TRACE_HEX,
     })
     expect(fetchCount).toBe(1)
+    // Age must be present so max-age=15 doesn't restart downstream.
+    expect(Number.isInteger(Number(headers.get('age')))).toBe(true)
   })
 })
 

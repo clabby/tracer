@@ -138,6 +138,12 @@ async function serveStatic(pathname: string): Promise<Response> {
 
 const server = Bun.serve({
   port: config.port,
+  // Above the 12s upstream worst case — Bun's 10s default would reset the
+  // client mid-stall, hiding the structured 504 the budget exists for.
+  idleTimeout: 30,
+  // Search/compile bodies are tiny; Bun's 128MB default invites memory DoS
+  // on the open POST routes.
+  maxRequestBodySize: 1_000_000,
   fetch(req: Request): Promise<Response> | Response {
     const url = new URL(req.url)
     const p = url.pathname
