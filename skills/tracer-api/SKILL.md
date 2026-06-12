@@ -71,6 +71,15 @@ Prefer `/summary` and `/aggregate` over the full trace — they answer
 - Raw Tempo (read-only escape hatch): `$BASE/tempo/...` — prefer the typed
   routes.
 
+## Reporting
+
+When you mention a notable trace (a straggler round, an error spike, an
+outlier), include its web UI link so a human can open it directly:
+`$BASE/#/trace/<traceId>`, e.g.
+`http://localhost:8080/#/trace/85765a68a1554a3106bd2742cc56db2e`.
+The flamegraph there shows per-node lanes, the merged flame, stats, and the
+heatmap for exactly the trace you analyzed.
+
 ## Don'ts
 
 - Don't fetch full traces to compute per-node timing — `/aggregate` already
