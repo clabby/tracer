@@ -1,8 +1,9 @@
 # `tracer-docker`
 
 The production web image for the tracer viewer, plus the just recipes that
-build and run it. The viewer is a static SPA served by Caddy, which also
-reverse-proxies the Tempo HTTP API under `/tempo/*`.
+build and run it. One Bun process serves the SPA, the agent-first REST API
+under `/api/v1`, and a read-only passthrough to the raw Tempo HTTP API under
+`/tempo/*`.
 
 The endpoint is **not** configurable in the UI — it is supplied at deploy time
 via the `TEMPO_URL` environment variable. This keeps a deployment pinned to one
@@ -54,8 +55,8 @@ See [`demo/README.md`](./demo/README.md) for details.
 
 ## Ports
 
-| Port | Service | Purpose                          |
-|------|---------|----------------------------------|
-| 8080 | web     | Web viewer (proxies `/tempo/*`)  |
+| Port | Service | Purpose                                        |
+|------|---------|------------------------------------------------|
+| 8080 | web     | Web viewer + `/api/v1` + `/tempo/*` passthrough |
 
 The demo additionally exposes Tempo's `3200` (HTTP API) and `4317` (OTLP gRPC).

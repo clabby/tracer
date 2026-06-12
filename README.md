@@ -50,12 +50,15 @@ purpose-built viewer that goes further:
   pinned to one Tempo via `TEMPO_URL`, the browser only talks to the viewer's
   origin (no CORS), and it opens straight on results.
 - **Dense, quiet, monospace UI** designed for reading traces, not dashboards.
+- **An agent-first REST API.** The same parsing/dedup/aggregation that powers
+  the UI is served as a typed, self-describing API under `/api/v1` — built
+  for AI agents (and scripts) exploring trace data.
 
 ## Quick start
 
-Run the published image, pointed at your Tempo. The container reverse-proxies
-`/tempo/*` to `TEMPO_URL`, so the browser only talks to the viewer's origin (no
-CORS needed on Tempo):
+Run the published image, pointed at your Tempo. One process serves the UI,
+the REST API (`/api/v1`), and a read-only `/tempo/*` passthrough, so browsers
+and agents only talk to the viewer's origin (no CORS needed on Tempo):
 
 ```sh
 docker run -p 8080:8080 -e TEMPO_URL=https://tempo.example.com \
@@ -81,16 +84,55 @@ open http://localhost:8080
 nodes emit one consensus round per second. Stop it with `just demo-down`. See
 [`docker/demo/README.md`](docker/demo/README.md).
 
+## The REST API (for agents)
+
+Every deployment serves a typed REST API under `/api/v1` — the middle layer
+between Tempo and clients. It does what the UI's engine does (deterministic
+newest-first search, OTLP parsing, span dedup, per-instance splitting,
+cross-instance aggregation) and returns compact, schema-stable JSON:
+
+```sh
+curl -s http://localhost:8080/api/v1                  # discovery index: every route + examples
+curl -s http://localhost:8080/api/v1/openapi.json     # OpenAPI 3.1, schemas incl. units
+curl -s http://localhost:8080/api/v1/docs             # agent guide (also /.well-known/llms.txt)
+
+curl -s 'http://localhost:8080/api/v1/search/traces?errorsOnly=true&since=1h&limit=10'
+curl -s  http://localhost:8080/api/v1/traces/$TRACE_ID/summary     # per-node rollups, no spans
+curl -s  http://localhost:8080/api/v1/traces/$TRACE_ID/aggregate   # per-node stats per code path
+```
+
+The API is self-describing (start at `GET /api/v1`); all errors are RFC 9457
+`problem+json` with per-field hints. Statistical insights (stats tab,
+heatmap) stay client-side by design.
+
+### Install the agent skill
+
+A [Claude Code](https://claude.com/claude-code) skill that teaches an agent
+the API's conventions and recipes ships in [`skills/tracer-api`](skills/tracer-api/SKILL.md).
+Install it by copying it into your project's (or global) skills directory:
+
+```sh
+# project-local (recommended): available to anyone working in that repo
+mkdir -p .claude/skills && cp -r path/to/tracer/skills/tracer-api .claude/skills/
+
+# or globally, for every project on this machine
+mkdir -p ~/.claude/skills && cp -r path/to/tracer/skills/tracer-api ~/.claude/skills/
+```
+
+Then ask things like *"which node was slowest in the last few rounds on
+http://localhost:8080?"* — the agent will discover the rest from `/api/v1`.
+
 ## Development
 
 ```sh
 cd web
 bun install
-bun run dev        # http://localhost:5173, proxies /tempo → localhost:3200
-bun test src       # unit tests
-bun run check      # typecheck
+bun run dev:api    # API server on :7777 (TEMPO_URL defaults to localhost:3200)
+bun run dev        # http://localhost:5173, proxies /api → :7777, /tempo → :3200
+bun test src server # unit tests
+bun run check      # typecheck (also the API schema drift gate)
 ```
 
 The Rust load generator lives in `docker/demo/loadgen/`
 (`cargo run -p consensus-sim` from there), the deployment pieces in `docker/`.
-Architecture and contracts: `DESIGN.md`.
+Architecture and contracts: `AGENTS.md`.
