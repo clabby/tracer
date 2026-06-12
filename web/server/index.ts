@@ -13,7 +13,7 @@
 import { TempoClient } from '../src/api/tempo'
 import { loadConfig, redactTempoUrl } from './config'
 import { badRequest, gatewayTimeout, badGateway, internal, methodNotAllowed, notFound } from './problem'
-import { resolveRoute, type Deps } from './router'
+import { resolveRoute, withCompression, type Deps } from './router'
 import { ALL_ROUTES } from './surface'
 
 const UPSTREAM_TIMEOUT_MS = 12_000
@@ -73,20 +73,25 @@ function routeHint(): string {
 
 async function handleApi(req: Request, url: URL): Promise<Response> {
   if (req.method === 'OPTIONS') return preflight()
+  const res = await apiResponse(req, url)
+  return withCors(await withCompression(req, res))
+}
+
+async function apiResponse(req: Request, url: URL): Promise<Response> {
   // Bare /api lands on the discovery index.
   const pathname = url.pathname === '/api' || url.pathname === '/api/' ? '/api/v1' : url.pathname
   const { route, params, allowed } = resolveRoute(ALL_ROUTES, req.method, pathname)
   if (route === null) {
     if (allowed.length > 0) {
-      return withCors(methodNotAllowed(req.method, url.pathname, allowed))
+      return methodNotAllowed(req.method, url.pathname, allowed)
     }
-    return withCors(notFound(`${req.method} ${url.pathname} is not an API route.`, routeHint()))
+    return notFound(`${req.method} ${url.pathname} is not an API route.`, routeHint())
   }
   try {
-    return withCors(await route.handler(req, url, params, deps))
+    return await route.handler(req, url, params, deps)
   } catch (err) {
-    if (err instanceof Response) return withCors(err) // handlers may throw problems
-    return withCors(upstreamProblem(err, config.tempoUrl))
+    if (err instanceof Response) return err // handlers may throw problems
+    return upstreamProblem(err, config.tempoUrl)
   }
 }
 
@@ -109,7 +114,7 @@ async function passthroughTempo(req: Request, url: URL): Promise<Response> {
 
 // ----------------------------------------------------------------- static --
 
-async function serveStatic(pathname: string): Promise<Response> {
+async function serveStatic(req: Request, pathname: string): Promise<Response> {
   if (!hasStatic) {
     return notFound(
       'No UI bundle is present; this deployment serves /api/v1 and /tempo only.',
@@ -131,6 +136,22 @@ async function serveStatic(pathname: string): Promise<Response> {
   const headers: Record<string, string> = {}
   // Vite emits content-hashed filenames under /assets — cache forever.
   if (rel.startsWith('/assets/')) headers['cache-control'] = ASSET_CACHE
+  // The image pre-compresses assets (gzip -k9); serve the .gz twin with the
+  // ORIGINAL content-type when the client accepts gzip.
+  const accept = req.headers.get('accept-encoding') ?? ''
+  if (!rel.endsWith('.gz') && /(^|[,\s])gzip($|[;,\s])/i.test(accept)) {
+    const gz = Bun.file(`${dir}${rel}.gz`)
+    if (await gz.exists()) {
+      return new Response(gz, {
+        headers: {
+          ...headers,
+          'content-type': file.type,
+          'content-encoding': 'gzip',
+          vary: 'accept-encoding',
+        },
+      })
+    }
+  }
   return new Response(file, { headers })
 }
 
@@ -155,7 +176,7 @@ const server = Bun.serve({
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       return methodNotAllowed(req.method, p, ['GET', 'HEAD'])
     }
-    return serveStatic(p)
+    return serveStatic(req, p)
   },
   error(err: Error): Response {
     return internal(redactTempoUrl(err.message, config.tempoUrl))

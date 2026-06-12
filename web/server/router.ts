@@ -89,3 +89,27 @@ export function json(body: unknown, status = 200, headers: Record<string, string
     headers: { 'content-type': 'application/json', ...headers },
   })
 }
+
+const COMPRESS_MIN_BYTES = 1024
+
+/**
+ * Gzip a JSON/text response when the client accepts it (Caddy used to do
+ * this for the whole deployment). Small bodies pass through untouched;
+ * compressible responses always gain `Vary: accept-encoding`.
+ */
+export async function withCompression(req: Request, res: Response): Promise<Response> {
+  if (res.body === null || res.headers.has('content-encoding')) return res
+  const ct = res.headers.get('content-type') ?? ''
+  if (!(ct.includes('json') || ct.startsWith('text/'))) return res
+  const accept = req.headers.get('accept-encoding') ?? ''
+  if (!/(^|[,\s])gzip($|[;,\s])/i.test(accept)) return res
+  const buf = new Uint8Array(await res.arrayBuffer())
+  const headers = new Headers(res.headers)
+  headers.set('vary', 'accept-encoding')
+  if (buf.byteLength < COMPRESS_MIN_BYTES) {
+    return new Response(buf, { status: res.status, headers })
+  }
+  headers.set('content-encoding', 'gzip')
+  headers.delete('content-length')
+  return new Response(Bun.gzipSync(buf), { status: res.status, headers })
+}

@@ -13,6 +13,9 @@ RUN bun install --frozen-lockfile
 
 COPY web/ ./
 RUN bun run build
+# Pre-compress hashed assets; the server negotiates the .gz twin per request
+# (Caddy's `encode` used to do this at the edge).
+RUN cd dist && find assets -type f -exec gzip -k -9 {} +
 
 # Runtime: one Bun process serves the SPA, the /api/v1 REST API, and the
 # GET-only /tempo passthrough on port 8080. The server has zero runtime
