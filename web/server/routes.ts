@@ -7,6 +7,8 @@
 import type { RouteDef, RouteParamDoc } from './router'
 import { handleHealth } from './misc'
 import { handleCompile, handleSearchEvents, handleSearchTraces } from './search'
+import { handleTrace, handleTraceAggregate, handleTraceSummary } from './traces'
+import { handleTagNames, handleTagValues } from './tags'
 
 /** The flat GET search dialect, shared by both search routes. */
 const SEARCH_QUERY_PARAMS: RouteParamDoc[] = [
@@ -179,5 +181,91 @@ export const ROUTES: RouteDef[] = [
     example:
       'curl -s -X POST http://localhost:8080/api/v1/traceql/compile -H \'content-type: application/json\' -d \'{"filter":{"services":["node-1"],"minDuration":"100ms"}}\'',
     handler: handleCompile,
+  },
+  {
+    method: 'GET',
+    pattern: '/api/v1/traces/:traceId/summary',
+    operationId: 'getTraceSummary',
+    summary:
+      'Pre-flight overview of one trace: duration, span/event counts, and per-instance rollups (spanCount, errorCount, start/end extents) WITHOUT any span payload. Answers "which node was slowest / erroring" in one small response — fetch this before deciding to download the full trace.',
+    params: [
+      { name: 'traceId', in: 'path', description: 'Trace id (hex; base64 also accepted).' },
+    ],
+    responseSchema: 'traceOverviewSchema',
+    example: 'curl -s http://localhost:8080/api/v1/traces/0af7651916cd43dd8448eb211c80319c/summary',
+    handler: handleTraceSummary,
+  },
+  {
+    method: 'GET',
+    pattern: '/api/v1/traces/:traceId/aggregate',
+    operationId: 'getTraceAggregate',
+    summary:
+      'The merged ("aggregate") flame tree: spans from all instances grouped by name-path (the same methodology as the UI\'s merged flame), flattened to pre-ordered nodes with per-instance duration/error stats. Compare one code path across every node without downloading spans.',
+    params: [
+      { name: 'traceId', in: 'path', description: 'Trace id (hex; base64 also accepted).' },
+      {
+        name: 'instance',
+        in: 'query',
+        description: 'Limit the aggregation to these instance ids. Repeatable; omit for all.',
+        example: 'node-1',
+      },
+      {
+        name: 'spanIds',
+        in: 'query',
+        description: 'Include per-instance matching span ids on every node (default false).',
+        example: 'true',
+      },
+    ],
+    responseSchema: 'aggregateResponseSchema',
+    example:
+      'curl -s http://localhost:8080/api/v1/traces/0af7651916cd43dd8448eb211c80319c/aggregate',
+    handler: handleTraceAggregate,
+  },
+  {
+    method: 'GET',
+    pattern: '/api/v1/traces/:traceId',
+    operationId: 'getTrace',
+    summary:
+      'One fully parsed trace: instance-split, span-deduplicated, with the tree encoded as parentSpanId/childSpanIds over a flat span list (times in ns relative to startUnixMs). The complete payload — prefer /summary and /aggregate when you only need rollups.',
+    params: [
+      { name: 'traceId', in: 'path', description: 'Trace id (hex; base64 also accepted).' },
+      {
+        name: 'instance',
+        in: 'query',
+        description: 'Return only these instance ids (links to excluded spans are severed). Repeatable.',
+        example: 'node-1',
+      },
+    ],
+    responseSchema: 'wireTraceSchema',
+    example: 'curl -s http://localhost:8080/api/v1/traces/0af7651916cd43dd8448eb211c80319c',
+    handler: handleTrace,
+  },
+  {
+    method: 'GET',
+    pattern: '/api/v1/tags/:scope',
+    operationId: 'getTagNames',
+    summary:
+      'Attribute-name suggestions for a scope (span, resource, or event) — discover the attribute space before building filters.',
+    params: [
+      { name: 'scope', in: 'path', description: 'span, resource, or event.', example: 'resource' },
+      { name: 'q', in: 'query', description: 'Case-insensitive substring filter.', example: 'service' },
+    ],
+    responseSchema: 'tagNamesResponseSchema',
+    example: 'curl -s http://localhost:8080/api/v1/tags/span',
+    handler: handleTagNames,
+  },
+  {
+    method: 'GET',
+    pattern: '/api/v1/tags/:scope/:tag/values',
+    operationId: 'getTagValues',
+    summary: 'Known values for one attribute, e.g. every service.name in the resource scope.',
+    params: [
+      { name: 'scope', in: 'path', description: 'span, resource, or event.', example: 'resource' },
+      { name: 'tag', in: 'path', description: 'Attribute name (no scope prefix).', example: 'service.name' },
+      { name: 'q', in: 'query', description: 'Case-insensitive substring filter.', example: 'node' },
+    ],
+    responseSchema: 'tagValuesResponseSchema',
+    example: "curl -s 'http://localhost:8080/api/v1/tags/resource/service.name/values'",
+    handler: handleTagValues,
   },
 ]
