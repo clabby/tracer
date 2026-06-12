@@ -6,6 +6,7 @@
 
 import type { TempoClient } from '../src/api/tempo'
 import type { ServerConfig } from './config'
+import type { SchemaKey } from './registry'
 
 export interface Deps {
   tempo: TempoClient
@@ -27,10 +28,10 @@ export interface RouteDef {
   operationId: string
   summary: string
   params?: RouteParamDoc[]
-  /** Key of the request-body schema in lib/apischema's registry (POST only). */
-  requestSchema?: string
-  /** Key of the response schema in lib/apischema's registry. */
-  responseSchema: string
+  /** Registry key of the request-body schema (POST only). */
+  requestSchema?: SchemaKey
+  /** Registry key of the response schema; omitted for self-describing meta routes. */
+  responseSchema?: SchemaKey
   /** A runnable curl example, shown in the discovery index. */
   example: string
   handler: (

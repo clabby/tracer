@@ -14,7 +14,7 @@ import { TempoClient } from '../src/api/tempo'
 import { loadConfig, redactTempoUrl } from './config'
 import { badRequest, gatewayTimeout, badGateway, internal, methodNotAllowed, notFound } from './problem'
 import { resolveRoute, type Deps } from './router'
-import { ROUTES } from './routes'
+import { ALL_ROUTES } from './surface'
 
 const UPSTREAM_TIMEOUT_MS = 12_000
 const ASSET_CACHE = 'public, max-age=31536000, immutable'
@@ -68,12 +68,14 @@ function preflight(): Response {
 }
 
 function routeHint(): string {
-  return `Routes: ${ROUTES.map((r) => `${r.method} ${r.pattern}`).join(' · ')}`
+  return `Routes: ${ALL_ROUTES.map((r) => `${r.method} ${r.pattern}`).join(' · ')}`
 }
 
 async function handleApi(req: Request, url: URL): Promise<Response> {
   if (req.method === 'OPTIONS') return preflight()
-  const { route, params, allowed } = resolveRoute(ROUTES, req.method, url.pathname)
+  // Bare /api lands on the discovery index.
+  const pathname = url.pathname === '/api' || url.pathname === '/api/' ? '/api/v1' : url.pathname
+  const { route, params, allowed } = resolveRoute(ALL_ROUTES, req.method, pathname)
   if (route === null) {
     if (allowed.length > 0) {
       return withCors(methodNotAllowed(req.method, url.pathname, allowed))
@@ -140,6 +142,9 @@ const server = Bun.serve({
     const url = new URL(req.url)
     const p = url.pathname
     if (p === '/api' || p.startsWith('/api/')) return handleApi(req, url)
+    if (p === '/.well-known/llms.txt') {
+      return handleApi(new Request(new URL('/api/v1/docs', url), req), new URL('/api/v1/docs', url))
+    }
     if (p === '/tempo' || p.startsWith('/tempo/')) return passthroughTempo(req, url)
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       return methodNotAllowed(req.method, p, ['GET', 'HEAD'])
