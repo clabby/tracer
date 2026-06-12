@@ -1,6 +1,6 @@
 ---
 name: tracer-api
-description: Query a deployed tracer instance (the REST middle layer over Grafana Tempo for multi-instance traces) to find slow or failing nodes, compare code paths across a cluster, and drill into spans/events. Use when the user asks about traces, spans, consensus-round timing, straggler/slow nodes, or errors in a system observed by tracer, or mentions a tracer/Tempo deployment URL.
+description: Query a deployed tracer instance (the REST middle layer over Grafana Tempo for multi-instance traces) to find slow or failing nodes, compare code paths across a cluster, drill into spans/events, and answer natural-language analytics asks ("mean/median per node over the last N rounds", "worst tail latency"). Use when the user asks about traces, spans, consensus-round timing, straggler/slow nodes, or errors in a system observed by tracer, or mentions a tracer/Tempo deployment URL.
 ---
 
 # Querying the tracer API
@@ -54,6 +54,46 @@ curl -s "$BASE/api/v1/traces/$TRACE_ID?instance=node-2"
 
 Prefer `/summary` and `/aggregate` over the full trace — they answer
 "which node was slowest / erroring on which code path" in a few KB.
+
+## Natural-language analytics asks
+
+Most requests arrive in workload vocabulary, not API vocabulary — e.g.
+*"fetch the latest 50 rounds; table of each instance's mean and median
+duration over all of them; which node has the worst tail latency and how far
+behind is it?"*. The pattern, every time:
+
+**1. Resolve the user's words to real span names.** Never assume "round" /
+"commit" / "block" is a literal span name — discover it:
+
+```sh
+curl -s "$BASE/api/v1/tags/span/name/values?q=round"   # substring match
+curl -s "$BASE/api/v1/tags/span/name/values"           # no hit? list all, pick the closest
+```
+
+A broad recent search also reveals vocabulary: `rootTraceName` in
+`/search/traces?since=15m&limit=5` rows is what the workload calls its
+top-level operation, and `/aggregate` `path[]`s name every phase.
+
+**2. Fetch the N matching operations.**
+`/search/traces?name=<resolved>&nameRegex=false&since=15m&limit=50`.
+If fewer rows than asked for come back, widen the range (`since=1h`, `24h`,
+…) and retry — results are "latest N in range", so a too-narrow window is
+the only reason to come up short.
+
+**3. Analyze with a script, not by eyeballing JSON.** Loop the trace ids
+through `/aggregate` (a few KB each; the server caches parses, concurrent
+fetches are fine) and compute in the script. Per-instance duration for one
+operation = `perInstance[id].maxNs` on the depth-0 node. Then aggregate
+ACROSS operations: mean / median / p95 / max per instance, deltas between an
+instance and the rest, error counts. Tail latency = the high quantiles, not
+the mean — a node can hide a terrible p95 behind a normal average.
+
+**4. Report only the signal.** Lead with the direct answer to what was
+asked, then one compact table. Flag what the user didn't ask for but needs:
+outlier operations (e.g. >2× the median duration), nodes with `errorCount > 0`,
+phases that only one node executed (`/aggregate` rows whose `perInstance`
+has a single key — timeouts/retries often look like this). Link the web UI
+for every trace you call out. No raw JSON dumps.
 
 ## Other moves
 
