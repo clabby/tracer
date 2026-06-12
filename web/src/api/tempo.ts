@@ -22,6 +22,10 @@ import { parseTrace } from '../lib/trace'
 const TIMEOUT_MS = 15_000
 const BODY_EXCERPT_CHARS = 256
 
+/** Pipeline suffix appended to event searches (exported so the API server's
+ * query echo states exactly what was executed). */
+export const EVENT_SELECT = ' | select(name, resource.service.name, event.level)'
+
 export class TempoClient implements ITempoClient {
   readonly baseUrl: string
   private readonly timeoutMs: number
@@ -94,7 +98,7 @@ export class TempoClient implements ITempoClient {
    * service, and event level.
    */
   async searchEvents(filter: FilterState, range: TimeRange): Promise<EventSummary[]> {
-    const q = `${buildTraceQL(filter, 'events')} | select(name, resource.service.name, event.level)`
+    const q = `${buildTraceQL(filter, 'events')}${EVENT_SELECT}`
     return this.windowedSearch(
       range,
       filter.limit,
