@@ -1,5 +1,6 @@
-# Build the production web image. It serves the SPA and reverse-proxies
-# /tempo/* to the Tempo endpoint given by the TEMPO_URL env var at run time.
+# Build the production web image. One Bun process serves the SPA, the
+# /api/v1 REST API, and a GET-only /tempo passthrough, all backed by the
+# Tempo endpoint given by the TEMPO_URL env var at run time.
 build:
   cd .. && docker buildx bake --progress plain -f docker/docker-bake.hcl
 

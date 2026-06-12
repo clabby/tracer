@@ -6,8 +6,9 @@
 # shares it and the simulated rounds line up across nodes).
 #
 # The web service is the SAME production image shipped to real deployments; the
-# only demo-specific wiring is TEMPO_URL=tempo:3200, which Caddy reverse-proxies
-# under /tempo. Real deployments set TEMPO_URL to their own Tempo endpoint.
+# only demo-specific wiring is TEMPO_URL=tempo:3200, which the bundled API
+# server queries (and passes through read-only under /tempo). Real deployments
+# set TEMPO_URL to their own Tempo endpoint.
 #
 # The grafana/tempo image ships no shell utilities (no wget/curl/sh), so a
 # container healthcheck is not possible and `depends_on` only orders startup.
@@ -83,10 +84,10 @@ services:
     image: tracer-web:local
     restart: unless-stopped
     environment:
-      # Caddy reverse-proxies /tempo/* to this upstream (see docker/Caddyfile).
+      # The API server queries this upstream (and serves /tempo/* read-only).
       TEMPO_URL: tempo:3200
     ports:
-      - "8080:8080" # the viewer; proxies /tempo/* to Tempo
+      - "8080:8080" # the viewer + /api/v1 + /tempo passthrough
     depends_on:
       - tempo
 

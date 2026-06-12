@@ -14,12 +14,26 @@ RUN bun install --frozen-lockfile
 COPY web/ ./
 RUN bun run build
 
-FROM caddy:2-alpine
+# Runtime: one Bun process serves the SPA, the /api/v1 REST API, and the
+# GET-only /tempo passthrough on port 8080. The server has zero runtime
+# dependencies — only the lib sources and the built dist ride along. It
+# fails fast with a clear message when TEMPO_URL is unset (the contract
+# entrypoint.sh used to enforce for Caddy).
+FROM oven/bun:${BUN_VERSION}-slim
 
-COPY docker/Caddyfile /etc/caddy/Caddyfile
-COPY --from=build /app/dist /srv
+WORKDIR /app
+COPY --from=build /app/dist ./dist
+COPY web/server ./server
+COPY web/src/lib ./src/lib
+COPY web/src/api ./src/api
+COPY web/package.json ./package.json
 
-# Fail fast if the required TEMPO_URL is missing, then run Caddy.
-COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+ENV PORT=8080
+EXPOSE 8080
+USER bun
+
+# Liveness only (/api/v1 is static) — Tempo reachability is /api/v1/health.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
+  CMD ["bun", "-e", "const r = await fetch('http://localhost:8080/api/v1'); if (!r.ok) process.exit(1)"]
+
+ENTRYPOINT ["bun", "server/index.ts"]

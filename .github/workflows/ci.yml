@@ -32,7 +32,7 @@ jobs:
         run: bun run check
 
       - name: Test
-        run: bun test src
+        run: bun test src server
 
       - name: Build
         run: bun run build
