@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faFileExport, faMoon, faSun } from '@fortawesome/free-solid-svg-icons'
-import { TempoClient } from './api/tempo'
+import { ApiClient } from './api/client'
 import EventDetails from './components/EventDetails'
 import ExportModal from './components/ExportModal'
 import EventsView from './components/EventsView'
@@ -52,10 +52,10 @@ function useRoute(): [Route, (r: Route) => void] {
 
 type Theme = 'dark' | 'light'
 
-// Fixed Tempo API base. In production Caddy reverse-proxies /tempo/* to the
-// deploy-time TEMPO_URL; in dev the Vite server proxies it. There is no
-// in-app endpoint setting.
-const TEMPO_BASE = '/tempo'
+// Fixed API base. The tracer API server (which talks to the deploy-time
+// TEMPO_URL) serves it in production; in dev the Vite server proxies it to
+// `bun run dev:api`. There is no in-app endpoint setting.
+const API_BASE = '/api/v1'
 
 export default function App() {
   const [route, navigate] = useRoute()
@@ -79,9 +79,9 @@ export default function App() {
     return () => mq.removeEventListener('change', onChange)
   }, [])
 
-  // The Tempo endpoint is fixed at the relative /tempo path; the deployment
-  // (Caddy's TEMPO_URL, or the dev Vite proxy) decides where that points.
-  const client = useMemo(() => new TempoClient(TEMPO_BASE), [])
+  // The API endpoint is fixed at the relative /api/v1 path; the deployment
+  // (the API server's TEMPO_URL, or the dev Vite proxy) decides what backs it.
+  const client = useMemo(() => new ApiClient(API_BASE), [])
 
   const connected = useQuery({
     queryKey: ['ping'],
