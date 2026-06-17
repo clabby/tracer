@@ -1,14 +1,16 @@
 ---
 name: tracer-api
-description: Query a deployed tracer instance (the REST middle layer over Grafana Tempo for multi-instance traces) to find slow or failing nodes, compare code paths across a cluster, drill into spans/events, and answer natural-language analytics asks ("mean/median per node over the last N rounds", "worst tail latency"). Use when the user asks about traces, spans, consensus-round timing, straggler/slow nodes, or errors in a system observed by tracer, or mentions a tracer/Tempo deployment URL.
+description: Query a deployed tracer instance (the REST middle layer over Grafana Tempo for distributed systems where each node emits its own trace) to find slow or failing nodes, compare one span across the cluster by name + attribute, drill into spans/events, and answer natural-language analytics asks ("mean/median per node over the last N rounds", "worst tail latency"). Use when the user asks about traces, spans, consensus-round timing, straggler/slow nodes, or errors in a system observed by tracer, or mentions a tracer/Tempo deployment URL.
 ---
 
 # Querying the tracer API
 
 tracer ingests nothing itself — it reads a Grafana Tempo instance and serves
-a typed REST API for traces emitted by many nodes running the SAME system
-(one trace id per logical operation, e.g. a consensus round; every node's
-spans live in that one trace, deduplicated and split per instance).
+a typed REST API for distributed systems where many nodes run the SAME system
+and EACH node emits its OWN trace. To view or compare one logical operation
+across nodes, correlate the matching span across their separate traces by span
+name + an attribute that pins the operation (e.g. a consensus view) with
+`/compare` and `/compare/aggregate`.
 
 `$BASE` below is the deployment origin, e.g. `http://localhost:8080`.
 
@@ -28,32 +30,36 @@ spans live in that one trace, deduplicated and split per instance).
   `spanStartUnixMs` are epoch MILLISECONDS; every `*Ns` field is NANOSECONDS,
   and span/event `startNs`/`timeNs` are RELATIVE to the trace's `startUnixMs`.
 - **Instances**: `service.name` + optional `#service.instance.id`
-  (`node-2`, `api#worker-001`). An instance = one node/process.
+  (`node-2`, `api#worker-001`). An instance = one node/process. A fetched trace
+  is ONE node; cross-node views come from `/compare` (which assembles one lane
+  per node).
 - **Search is "latest N in range", newest-first, deterministic.** No
   pagination — narrow or shift the range (`since=15m`, `from`/`to`) to go
   deeper.
 - Errors are RFC 9457 `application/problem+json`; on 400 read
   `invalidParams[*].reason`/`example` and fix your request.
 
-## Workflow: find the slow / failing node
+## Workflow: find the slow / failing node on an operation
+
+Each node runs the operation in its OWN trace, so correlate them by span name +
+an attribute that pins ONE operation (e.g. a consensus view).
 
 ```sh
-# 1. recent traces (add errorsOnly=true, service=, name=, attr=… to narrow)
-curl -s "$BASE/api/v1/search/traces?since=15m&limit=5"
-# 2. pre-flight ONE trace — small payload, per-instance rollups:
-#    spanCount, errorCount, earliestStartNs/latestEndNs (who started late /
-#    finished last)
-curl -s "$BASE/api/v1/traces/$TRACE_ID/summary"
-# 3. compare the same code path across nodes — flat flame nodes, each with
+# 1. resolve the span name + the pinning attribute (don't guess names)
+curl -s "$BASE/api/v1/tags/span/name/values?q=view"   # the span
+curl -s "$BASE/api/v1/tags/span/view/values"          # values that pin one operation
+# 2. per-node code-path stats for ONE operation — flat flame nodes, each with
 #    path[] and perInstance[id] = {count,minNs,maxNs,meanNs,totalNs,errorCount}
-curl -s "$BASE/api/v1/traces/$TRACE_ID/aggregate"
-# 4. only if rollups aren't enough — full spans (flat list; tree shape via
-#    parentSpanId/childSpanIds; events ride on their span). Scope it:
-curl -s "$BASE/api/v1/traces/$TRACE_ID?instance=node-2"
+curl -s "$BASE/api/v1/compare/aggregate?name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&since=1h"
+# 3. the full assembled comparison (one lane per node, aligned on the earliest start):
+curl -s "$BASE/api/v1/compare?name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&since=1h"
+# 4. one node's own trace in full (one trace = one node):
+curl -s "$BASE/api/v1/traces/$TRACE_ID"
 ```
 
-Prefer `/summary` and `/aggregate` over the full trace — they answer
-"which node was slowest / erroring on which code path" in a few KB.
+`/compare/aggregate` answers "which node was slowest / erroring on which code
+path" in a few KB; `perInstance[id].meanNs` reveals the straggler. `/summary`
+gives one node's rollup before you download its full trace.
 
 ## Natural-language analytics asks
 
@@ -62,38 +68,57 @@ Most requests arrive in workload vocabulary, not API vocabulary — e.g.
 duration over all of them; which node has the worst tail latency and how far
 behind is it?"*. The pattern, every time:
 
-**1. Resolve the user's words to real span names.** Never assume "round" /
-"commit" / "block" is a literal span name — discover it:
+**1. Resolve the user's words to a span name AND the attribute that pins one
+operation.** Never assume "round" / "commit" / "view" is a literal span name —
+discover both:
 
 ```sh
-curl -s "$BASE/api/v1/tags/span/name/values?q=round"   # substring match
-curl -s "$BASE/api/v1/tags/span/name/values"           # no hit? list all, pick the closest
+curl -s "$BASE/api/v1/tags/span/name/values?q=round"   # the span name
+curl -s "$BASE/api/v1/tags/span"                        # candidate pinning attrs (view, height, …)
+curl -s "$BASE/api/v1/tags/span/view/values"           # the operation ids to iterate
 ```
 
 A broad recent search also reveals vocabulary: `rootTraceName` in
 `/search/traces?since=15m&limit=5` rows is what the workload calls its
-top-level operation, and `/aggregate` `path[]`s name every phase.
+top-level operation, and `/compare/aggregate` `path[]`s name every phase.
 
-**2. Fetch the N matching operations.**
-`/search/traces?name=<resolved>&nameRegex=false&since=15m&limit=50`.
-If fewer rows than asked for come back, widen the range (`since=1h`, `24h`,
-…) and retry — results are "latest N in range", so a too-narrow window is
-the only reason to come up short.
+**2. Enumerate the N operations.** Each operation is one value of the pinning
+attribute (e.g. `view=1612`). Get the recent values from
+`/api/v1/tags/span/<attr>/values` (widen `since` if you need more); each value
+is one operation to compare across nodes.
 
-**3. Analyze with a script, not by eyeballing JSON.** Loop the trace ids
-through `/aggregate` (a few KB each; the server caches parses, concurrent
-fetches are fine) and compute in the script. Per-instance duration for one
-operation = `perInstance[id].maxNs` on the depth-0 node. Then aggregate
-ACROSS operations: mean / median / p95 / max per instance, deltas between an
-instance and the rest, error counts. Tail latency = the high quantiles, not
-the mean — a node can hide a terrible p95 behind a normal average.
+**3. Analyze with a script, not by eyeballing JSON.** Loop the operation values
+through `/compare/aggregate?name=<span>&nameRegex=false&attr=span.<attr>=<value>`
+(a few KB each; the server caches per-node parses, concurrent calls are fine).
+Per-instance duration for one operation = `perInstance[id].maxNs` on the
+depth-0 node. Then aggregate ACROSS operations: mean / median / p95 / max per
+instance, deltas between an instance and the rest, error counts. Tail latency =
+the high quantiles, not the mean — a node can hide a terrible p95 behind a
+normal average.
 
 **4. Report only the signal.** Lead with the direct answer to what was
 asked, then one compact table. Flag what the user didn't ask for but needs:
 outlier operations (e.g. >2× the median duration), nodes with `errorCount > 0`,
-phases that only one node executed (`/aggregate` rows whose `perInstance`
+phases that only one node executed (`/compare/aggregate` rows whose `perInstance`
 has a single key — timeouts/retries often look like this). Link the web UI
-for every trace you call out. No raw JSON dumps.
+for every operation you call out. No raw JSON dumps.
+
+## Compare across nodes (the cross-node primitive)
+
+Cross-node analysis always goes through compare, because each node emits its own
+trace. Both endpoints take the search dialect; give an exact `name`
+(`nameRegex=false`) plus an `attr` that pins one operation, or there is nothing
+to correlate on (400).
+
+- `/compare` returns the SAME shape as `/traces/:id` (a multi-instance wire
+  trace, one lane per node, aligned on the earliest match's start and
+  id-prefixed) — analyze or render it exactly like a fetched trace.
+- `/compare/aggregate` returns the merged flame: nodes per `path[]` with
+  `perInstance[id]` duration/error stats (add `spanIds=true` for the matching
+  span ids). Prefer it for "who is slow on which path" — a few KB, no spans.
+
+The UI exposes this as the **Compare** button (shareable at
+`$BASE/#/compare?...`).
 
 ## Other moves
 
@@ -113,17 +138,19 @@ for every trace you call out. No raw JSON dumps.
 
 ## Reporting
 
-When you mention a notable trace (a straggler round, an error spike, an
-outlier), include its web UI link so a human can open it directly:
-`$BASE/#/trace/<traceId>`, e.g.
-`http://localhost:8080/#/trace/85765a68a1554a3106bd2742cc56db2e`.
-The flamegraph there shows per-node lanes, the merged flame, stats, and the
-heatmap for exactly the trace you analyzed.
+When you mention a notable operation (a straggler round, an error spike, an
+outlier), include its web UI link so a human can open it directly. For a
+cross-node comparison, link the compare view:
+`$BASE/#/compare?name=<span>&nameRegex=false&attr=span.view=<id>&since=1h` —
+it shows per-node lanes, stats, and the heatmap for that operation. For a single
+node, link its trace: `$BASE/#/trace/<traceId>`.
 
 ## Don'ts
 
-- Don't fetch full traces to compute per-node timing — `/aggregate` already
-  did the cross-instance join.
+- Don't fetch full traces to compute per-node timing — `/compare/aggregate`
+  already did the cross-node join.
+- Don't expect multiple nodes in one trace — each node emits its own; cross-node
+  analysis goes through `/compare`.
 - Don't mix the time units; don't pass milliseconds to `from`/`to`.
 - Don't hardcode workload span names (`round`, `commit`, …) in reusable
-  tooling — discover names via search results or `/aggregate` paths.
+  tooling — discover names via search results or `/compare/aggregate` paths.

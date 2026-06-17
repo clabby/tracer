@@ -18,9 +18,10 @@ Distributed systems emit one logical operation (a consensus round, a quorum, a
 broadcast) across many nodes at once. Most viewers show you one node's spans at
 a time. tracer is built around the cross-node view:
 
-- **One trace, every node.** When nodes share a trace id for the same round,
-  tracer lays each instance out on its own lane on a shared time axis — so you
-  see who started late, who stalled, and how the work overlapped across the
+- **One lane per node.** Each node emits its own trace; **Compare** correlates
+  the same span across them by name + attribute (e.g. `simplex.voter.view`,
+  `view=1612`) and lays each node out on its own lane on a shared time axis — so
+  you see who started late, who stalled, and how the work overlapped across the
   cluster.
 - **Merged aggregate flame.** Collapse all instances onto one flame, each span
   split into per-instance sub-bars, to compare the same code path across nodes.
@@ -88,8 +89,8 @@ nodes emit one consensus round per second. Stop it with `just demo-down`. See
 
 Every deployment serves a typed REST API under `/api/v1` — the middle layer
 between Tempo and clients. It does what the UI's engine does (deterministic
-newest-first search, OTLP parsing, span dedup, per-instance splitting,
-cross-instance aggregation) and returns compact, schema-stable JSON:
+newest-first search, OTLP parsing, span dedup, and cross-node correlation of one
+span by name + attribute) and returns compact, schema-stable JSON:
 
 ```sh
 curl -s http://localhost:8080/api/v1                  # discovery index: every route + examples
@@ -97,8 +98,11 @@ curl -s http://localhost:8080/api/v1/openapi.json     # OpenAPI 3.1, schemas inc
 curl -s http://localhost:8080/api/v1/docs             # agent guide (also /.well-known/llms.txt)
 
 curl -s 'http://localhost:8080/api/v1/search/traces?errorsOnly=true&since=1h&limit=10'
-curl -s  http://localhost:8080/api/v1/traces/$TRACE_ID/summary     # per-node rollups, no spans
-curl -s  http://localhost:8080/api/v1/traces/$TRACE_ID/aggregate   # per-node stats per code path
+curl -s  http://localhost:8080/api/v1/traces/$TRACE_ID/summary     # one node's rollup, no spans
+
+# correlate one span across nodes that each emit their OWN trace (name + attribute):
+curl -s 'http://localhost:8080/api/v1/compare?name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&since=1h'
+curl -s 'http://localhost:8080/api/v1/compare/aggregate?name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&since=1h'  # per-node stats per code path
 ```
 
 The API is self-describing (start at `GET /api/v1`); all errors are RFC 9457

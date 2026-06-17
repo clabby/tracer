@@ -2,10 +2,10 @@
 
 Agent guide for **tracer** — a scientific OTLP trace observatory. A Bun API
 server (the middle layer between Grafana Tempo and clients) serves a React
-SPA plus an agent-first REST API; together they render and expose
-multi-instance traces: spans from separate nodes executing the same protocol
-(e.g. a `commonware` consensus cluster) overlaid on one trace, deduplicated
-and split per instance.
+SPA plus an agent-first REST API. Each node of a distributed system (e.g. a
+`commonware` consensus cluster) emits its OWN trace; tracer correlates the same
+span across those separate traces by name + attribute and renders one
+multi-instance comparison (lanes per node).
 
 ## Commands
 
@@ -136,10 +136,13 @@ virtualization). Canvas precomputes layout — no per-frame allocations; keep
 - Three time units, never mixed: search ranges are unix **seconds**,
   `startUnixMs` anchors are epoch **milliseconds**, every `*Ns` field is
   **nanoseconds** relative to the trace start.
-- Cross-node traces: every node shares a deterministic trace id per round, so
-  one trace holds all nodes' spans; the parser splits them into `Instance`s
-  (identity: `service.name` + optional `#service.instance.id`) and dedupes
-  spans by id (first wins, with a warning).
+- Each node emits its OWN trace; a fetched trace is one node. Cross-node views
+  are built by the compare route (`assembleFromQuery` + `assembleComparison`):
+  it correlates the same span across separate traces by name + attribute and
+  assembles one synthetic multi-instance trace (`Instance` identity:
+  `service.name` + optional `#service.instance.id`; lanes share a time axis
+  anchored at the earliest match so start skew is visible, ids instance-prefixed).
+  `/compare/aggregate` is the cross-node code-path view.
 - Tempo search returns an unordered subset — the windowed newest-first search
   in `TempoClient` is what makes "latest N" deterministic. Don't bypass it.
 
