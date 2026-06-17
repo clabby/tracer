@@ -46,6 +46,30 @@ export function sanitizeFilter(filter: FilterState): FilterState {
   }
 }
 
+/**
+ * Serialize a (filter, range) pair into the GET search dialect the compare
+ * route consumes. Draft noise is dropped first (sanitizeFilter), so a search
+ * that ran in the UI compares cleanly too. The query is stored in the URL hash
+ * (`#/compare?...`), making a comparison shareable and reloadable.
+ */
+export function buildCompareQuery(filter: FilterState, range: TimeRange): string {
+  const f = sanitizeFilter(filter)
+  const p = new URLSearchParams()
+  for (const s of f.services) p.append('service', s)
+  if (f.name.trim() !== '') p.set('name', f.name)
+  p.set('nameRegex', String(f.nameIsRegex))
+  for (const l of f.levels) p.append('level', l)
+  if (f.errorsOnly) p.set('errorsOnly', 'true')
+  if (f.minDuration.trim() !== '') p.set('minDuration', f.minDuration)
+  if (f.maxDuration.trim() !== '') p.set('maxDuration', f.maxDuration)
+  for (const a of f.attrs) p.append('attr', `${a.scope}.${a.key}${a.op}${a.value}`)
+  if (f.rawQuery.trim() !== '') p.set('q', f.rawQuery)
+  p.set('limit', String(f.limit))
+  p.set('from', String(Math.floor(range.from)))
+  p.set('to', String(Math.ceil(range.to)))
+  return p.toString()
+}
+
 export class ApiClient implements ITempoClient {
   readonly baseUrl: string
 
@@ -123,6 +147,16 @@ export class ApiClient implements ITempoClient {
       'GET',
       `/traces/${encodeURIComponent(traceId)}`,
     )) as WireTrace
+    return hydrateTrace(wire)
+  }
+
+  /**
+   * Assemble a cross-trace comparison. `query` is the GET search dialect from
+   * `buildCompareQuery`; the server returns one synthetic multi-instance trace
+   * (one lane per matched span, aligned on the earliest match's start).
+   */
+  async compareByQuery(query: string): Promise<TraceModel> {
+    const wire = (await this.request('GET', `/compare?${query}`)) as WireTrace
     return hydrateTrace(wire)
   }
 

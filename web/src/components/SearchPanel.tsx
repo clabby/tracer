@@ -23,6 +23,7 @@ export default function SearchPanel({
   range,
   onRangeChange,
   onSearch,
+  onCompare,
   searching,
   client,
 }: SearchPanelProps) {
@@ -337,6 +338,15 @@ export default function SearchPanel({
         >
           {searching && <span className="spinner" aria-hidden="true" />}
           {searching ? 'searching…' : 'Search'}
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost sp-compare"
+          disabled={filter.name.trim() === '' && filter.rawQuery.trim() === ''}
+          title="assemble the matching span across every node into one comparison view"
+          onClick={onCompare}
+        >
+          Compare
         </button>
       </div>
     </div>

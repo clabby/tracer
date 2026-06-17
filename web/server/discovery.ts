@@ -45,7 +45,7 @@ export function makeDiscoveryRoutes(getAll: () => readonly RouteDef[]): RouteDef
             name: 'tracer API',
             version: 'v1',
             description:
-              'REST middle layer over Grafana Tempo for multi-instance traces: spans from every node sharing a trace id, deduplicated and split per instance, with merged-aggregate views for cross-node comparison.',
+              'REST middle layer over Grafana Tempo for distributed systems where each node emits its own trace. Fetch one node\'s trace, or correlate the same span across nodes by span name + attribute via /compare (and /compare/aggregate for per-node code-path stats).',
             conventions: CONVENTIONS,
             routes: getAll().map(routeEntry),
             links: {

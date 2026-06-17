@@ -12,7 +12,7 @@ export const CONVENTIONS = {
     'THREE UNITS, never mixed: search ranges (`from`/`to`) are unix SECONDS; trace/span anchors (`startUnixMs`, `spanStartUnixMs`) are epoch MILLISECONDS; every `*Ns` field is NANOSECONDS — and span/event `startNs`/`timeNs` are RELATIVE to the trace `startUnixMs`, not absolute.',
   ids: 'Trace/span ids are lowercase hex in responses; hex or base64 are accepted on input.',
   instances:
-    'An instance is one emitting process (one node). Identity = resource `service.name`, plus `#service.instance.id` when present (e.g. `node-2` or `api#worker-001`). Nodes executing the same protocol share one trace id per logical operation, so one trace holds every node\'s spans — the parser splits them per instance.',
+    'An instance is one emitting process (one node). Identity = resource `service.name`, plus `#service.instance.id` when present (e.g. `node-2` or `api#worker-001`). Each node emits its OWN trace, so a fetched trace is one node; to view or aggregate the same span across nodes, use /compare and /compare/aggregate (correlate by span name + attribute).',
   dedup:
     'Spans are deduplicated by span id (first occurrence wins; a warning is recorded). Trace search rows are deduplicated by trace id, event search rows by span id + event name.',
   ordering:
@@ -29,10 +29,11 @@ export function renderDocs(routes: readonly RouteDef[]): string {
   return `# tracer API — agent guide
 
 A REST middle layer over Grafana Tempo for traces emitted by many nodes
-running the SAME system (e.g. a consensus cluster). It does the heavy
-lifting — TraceQL compilation, deterministic newest-first search, OTLP
-parsing, span dedup, per-instance splitting, cross-instance aggregation —
-and serves compact, schema-stable JSON.
+running the SAME system (e.g. a consensus cluster). Each node emits its own
+trace; the server does the heavy lifting — TraceQL compilation, deterministic
+newest-first search, OTLP parsing, span dedup, and correlating the same span
+across nodes' separate traces by name + attribute (/compare) — and serves
+compact, schema-stable JSON.
 
 Start here:
 - \`GET /api/v1\` — machine-readable index: every route, parameter, example.
@@ -58,16 +59,20 @@ ${routeLines}
 \`$BASE\` is the deployment origin, e.g. \`http://localhost:8080\` —
 \`export BASE=http://localhost:8080\` and the commands below run as-is.
 
-### Which node was slow in recent rounds?
+### Which node was slow on a given operation?
+
+Each node runs the operation in its OWN trace, so correlate them by span name +
+an attribute that pins the operation (e.g. a consensus view). /compare assembles
+the lanes; /compare/aggregate gives the per-node stats per code path directly.
 
 \`\`\`sh
-# 1. find recent traces (newest first)
-curl -s "$BASE/api/v1/search/traces?since=15m&limit=5"
-# 2. pre-flight one trace: per-instance durations + error counts, no spans
-curl -s "$BASE/api/v1/traces/$TRACE_ID/summary"
-# 3. compare the same code path across nodes: per-instance stats per path
-curl -s "$BASE/api/v1/traces/$TRACE_ID/aggregate"
-#    -> in each node, perInstance[instanceId].meanNs reveals the straggler
+# discover the span name + the attribute that identifies one operation
+curl -s "$BASE/api/v1/tags/span/name/values?q=view"
+# per-node code-path stats for that one operation, no spans downloaded:
+curl -s "$BASE/api/v1/compare/aggregate?name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&since=1h"
+#   -> on each node, perInstance[instanceId].meanNs reveals the straggler
+# or the full assembled trace (one lane per node, aligned on the earliest start):
+curl -s "$BASE/api/v1/compare?name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&since=1h"
 \`\`\`
 
 ### Chase errors
@@ -75,8 +80,8 @@ curl -s "$BASE/api/v1/traces/$TRACE_ID/aggregate"
 \`\`\`sh
 curl -s "$BASE/api/v1/search/traces?errorsOnly=true&since=1h&limit=10"
 curl -s "$BASE/api/v1/search/events?level=error&since=1h"
-# then drill into a specific instance's spans only:
-curl -s "$BASE/api/v1/traces/$TRACE_ID?instance=node-2"
+# then download the offending node's trace (one trace = one node):
+curl -s "$BASE/api/v1/traces/$TRACE_ID"
 \`\`\`
 
 ### Build filters incrementally

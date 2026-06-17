@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
-import { buildAggregateTree, parseTrace } from './trace'
+import { assembleComparison, buildAggregateTree, parseTrace } from './trace'
 import { colorIndexForService } from './model'
-import type { TraceModel } from './model'
+import type { SpanMatch, TraceModel } from './model'
 
 /*
  * Handcrafted OTLP JSON fixtures. All absolute times are e18-magnitude
@@ -605,5 +605,97 @@ describe('buildAggregateTree', () => {
     expect(verify.totalNs).toBe(10 + 30 + 20)
     expect(verify.minNs).toBe(10)
     expect(verify.maxNs).toBe(30)
+  })
+})
+
+// ------------------------------------------------------- assembleComparison --
+
+/** One node's natural trace: a `view` span (with a `vote` child) under a root. */
+function nodeTrace(service: string, viewStartOff: number, viewDur: number): TraceModel {
+  const raw = {
+    resourceSpans: [
+      group(service, [
+        mkSpan({ id: 'aaaaaaaaaaaa0001', name: 'process', start: at(0), end: at(10000) }),
+        mkSpan({
+          id: 'cccccccccccc0001',
+          parent: 'aaaaaaaaaaaa0001',
+          name: 'simplex.voter.view',
+          start: at(viewStartOff),
+          end: at(viewStartOff + viewDur),
+          attrs: [sattr('view', '1612')],
+        }),
+        mkSpan({
+          id: 'dddddddddddd0001',
+          parent: 'cccccccccccc0001',
+          name: 'vote',
+          start: at(viewStartOff + 5),
+          end: at(viewStartOff + 5 + Math.floor(viewDur / 2)),
+        }),
+      ]),
+    ],
+  }
+  return parseTrace(raw, `${service}feed`)
+}
+
+function matchFor(model: TraceModel): SpanMatch {
+  const root = [...model.spans.values()].find((s) => s.name === 'simplex.voter.view')!
+  return { instance: model.instances[0], root, startUnixMs: model.startUnixMs }
+}
+
+describe('assembleComparison', () => {
+  test('aligns lanes on the earliest start (skew preserved), prefixes ids, promotes root', () => {
+    // Both nodes share a trace t0 (`process` @ 0); node-1 enters the view at
+    // 1ms, node-2 at 3ms. The comparison must anchor the axis at the earliest
+    // (node-1 -> 0) and shift node-2 right by its real 2ms skew, NOT
+    // left-align both. ms-scale offsets keep the cross-trace math exact.
+    const a = nodeTrace('node-1', 1_000_000, 400_000)
+    const b = nodeTrace('node-2', 3_000_000, 600_000)
+    // Pass reversed to prove the origin is order-independent (min, not first).
+    const model = assembleComparison([matchFor(b), matchFor(a)], 'compare')
+
+    expect(model.traceId).toBe('compare')
+    expect(model.startUnixMs).toBe(Number(T0 / 1_000_000n) + 1) // earliest absolute start
+    expect(model.instances.map((i) => i.id)).toEqual(['node-1', 'node-2'])
+
+    const byId = new Map(model.instances.map((i) => [i.id, i.rootSpans[0]]))
+    const n1 = byId.get('node-1')!
+    const n2 = byId.get('node-2')!
+    for (const root of [n1, n2]) {
+      expect(root.name).toBe('simplex.voter.view')
+      expect(root.parentSpanId).toBeNull()
+      expect(root.depth).toBe(0)
+      expect(root.children).toHaveLength(1)
+    }
+    // earliest lane anchors the axis; the later node is shifted by its skew
+    expect(n1.startNs).toBe(0)
+    expect(n2.startNs).toBe(2_000_000)
+    // the `vote` child rides along: within-lane offset stays exact
+    expect(n1.children[0].startNs).toBe(5)
+    expect(n2.children[0].startNs).toBe(2_000_005)
+    expect(n1.children[0].depth).toBe(1)
+
+    // extent = earliest origin to the latest end (node-2's 2ms-late 0.6ms view)
+    expect(model.durationNs).toBe(2_600_000)
+    // ids are instance-prefixed so the two traces' identical ids never collide
+    expect(model.spans.has('node-1::cccccccccccc0001')).toBe(true)
+    expect(model.spans.has('node-2::cccccccccccc0001')).toBe(true)
+    expect(model.spans.size).toBe(4)
+  })
+
+  test('a single match anchors at 0; subtree spanCount/maxDepth are right', () => {
+    const a = nodeTrace('node-1', 500_000, 200_000)
+    const model = assembleComparison([matchFor(a)], 'compare')
+    expect(model.instances).toHaveLength(1)
+    expect(model.instances[0].rootSpans[0].startNs).toBe(0)
+    expect(model.instances[0].spanCount).toBe(2)
+    expect(model.instances[0].maxDepth).toBe(1)
+    expect(model.durationNs).toBe(200_000)
+  })
+
+  test('empty matches yield an empty but valid model', () => {
+    const model = assembleComparison([], 'compare')
+    expect(model.instances).toEqual([])
+    expect(model.spans.size).toBe(0)
+    expect(model.durationNs).toBe(0)
   })
 })

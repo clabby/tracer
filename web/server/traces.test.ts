@@ -4,7 +4,13 @@ import { parseTrace } from '../src/lib/trace'
 import { hydrateTrace, type WireTrace } from '../src/lib/wire'
 import type { AggregateResponse, TraceOverview, ApiProblem } from '../src/lib/apischema'
 import type { Deps } from './router'
-import { clearTraceCache, handleTrace, handleTraceAggregate, handleTraceSummary } from './traces'
+import {
+  clearTraceCache,
+  handleCompare,
+  handleCompareAggregate,
+  handleTrace,
+  handleTraceSummary,
+} from './traces'
 import { handleTagNames, handleTagValues } from './tags'
 
 const TRACE_HEX = '0af7651916cd43dd8448eb211c80319c'
@@ -113,54 +119,16 @@ describe('handleTrace', () => {
     expect(body.instances[1].errorCount).toBe(1)
   })
 
-  test('?instance= scopes spans and severs cross-instance child links', async () => {
-    const { body } = await get<WireTrace>(
-      handleTrace,
-      `/api/v1/traces/${TRACE_HEX}?instance=node-1`,
-      { traceId: TRACE_HEX },
-    )
-    expect(body.instances.map((i) => i.id)).toEqual(['node-1'])
-    expect(body.spans.map((s) => s.spanId)).toEqual(['aaaaaaaaaaaa0001'])
-    // node-1's root had node-2's verify as a child — severed, not dangling.
-    expect(body.spans[0].childSpanIds).toEqual([])
-  })
-
-  test('?instance= promotes spans whose parent left with another instance', async () => {
-    // node-2's verify is parented under node-1's root; scoping to node-2
-    // must promote it to a root, not strand it with a dangling parent.
-    const { body } = await get<WireTrace>(
-      handleTrace,
-      `/api/v1/traces/${TRACE_HEX}?instance=node-2`,
-      { traceId: TRACE_HEX },
-    )
-    expect(body.instances.map((i) => i.id)).toEqual(['node-2'])
-    const verify = body.spans.find((s) => s.spanId === 'bbbbbbbbbbbb0002')!
-    expect(verify.parentSpanId).toBeNull()
-    expect(verify.depth).toBe(0)
-    // promoted into rootSpanIds, in startNs order (round @100 < verify @150)
-    expect(body.instances[0].rootSpanIds).toEqual(['aaaaaaaaaaaa0002', 'bbbbbbbbbbbb0002'])
-    expect(body.instances[0].maxDepth).toBe(0)
-    // every span is reachable from rootSpanIds via childSpanIds
-    const reachable = new Set<string>()
-    const walk = (id: string): void => {
-      reachable.add(id)
-      body.spans.find((s) => s.spanId === id)!.childSpanIds.forEach(walk)
-    }
-    for (const i of body.instances) i.rootSpanIds.forEach(walk)
-    expect([...reachable].sort()).toEqual(body.spans.map((s) => s.spanId).sort())
-  })
-
-  test('unknown ?instance= 400s naming the valid ids', async () => {
-    const url = new URL(`http://x/api/v1/traces/${TRACE_HEX}?instance=node-9`)
+  test('rejects unknown query params (e.g. instance)', async () => {
+    const url = new URL(`http://x/api/v1/traces/${TRACE_HEX}?instance=node-1`)
     try {
       await handleTrace(new Request(url), url, { traceId: TRACE_HEX }, deps())
       throw new Error('expected a problem Response')
     } catch (err) {
       expect(err).toBeInstanceOf(Response)
-      const p = (await (err as Response).json()) as ApiProblem
       expect((err as Response).status).toBe(400)
-      expect(p.invalidParams?.[0].reason).toContain('node-1')
-      expect(p.invalidParams?.[0].reason).toContain('node-2')
+      const p = (await (err as Response).json()) as ApiProblem
+      expect(p.invalidParams?.[0].name).toBe('instance')
     }
   })
 
@@ -171,9 +139,7 @@ describe('handleTrace', () => {
       `/api/v1/traces/${TRACE_HEX}/summary`,
       { traceId: TRACE_HEX },
     )
-    await get<AggregateResponse>(handleTraceAggregate, `/api/v1/traces/${TRACE_HEX}/aggregate`, {
-      traceId: TRACE_HEX,
-    })
+    await get<WireTrace>(handleTrace, `/api/v1/traces/${TRACE_HEX}`, { traceId: TRACE_HEX })
     expect(fetchCount).toBe(1)
     // Age must be present so max-age=15 doesn't restart downstream.
     expect(Number.isInteger(Number(headers.get('age')))).toBe(true)
@@ -198,41 +164,168 @@ describe('handleTraceSummary', () => {
   })
 })
 
-describe('handleTraceAggregate', () => {
-  test('per-instance stats per path; pre-order; no spanIds by default', async () => {
-    const { body } = await get<AggregateResponse>(
-      handleTraceAggregate,
-      `/api/v1/traces/${TRACE_HEX}/aggregate`,
-      { traceId: TRACE_HEX },
-    )
-    expect(body.instances).toEqual(['node-1', 'node-2'])
-    const round = body.nodes.find((n) => n.path.length === 1 && n.name === 'round')!
-    expect(round.count).toBe(2)
-    expect(round.perInstance['node-1']).toEqual({
-      count: 1, minNs: 1000, maxNs: 1000, meanNs: 1000, totalNs: 1000, errorCount: 0,
-    })
-    expect(round.perInstance['node-2']).toEqual({
-      count: 1, minNs: 2000, maxNs: 2000, meanNs: 2000, totalNs: 2000, errorCount: 1,
-    })
-    expect(round.spanIds).toBeUndefined()
-    // verify rides under node-1's root in the merged tree (cross-instance child)
-    const verify = body.nodes.find((n) => n.name === 'verify')!
-    expect(verify.path).toEqual(['round', 'verify'])
-    expect(verify.depth).toBe(1)
-    // pre-order: parent before child
-    expect(body.nodes.indexOf(round)).toBeLessThan(body.nodes.indexOf(verify))
+// Two SEPARATE node traces, each with a `simplex.voter.view` span (view=1612)
+// at a DIFFERENT absolute offset — exercises rebasing and id-prefixing.
+const COMPARE_SEARCH = {
+  traces: [
+    {
+      traceID: 'aa01',
+      startTimeUnixNano: at(1000),
+      spanSets: [
+        { matched: 1, spans: [{ spanID: 'cccccccccccc0001', name: 'simplex.voter.view', attributes: [] }] },
+      ],
+    },
+    {
+      traceID: 'bb02',
+      startTimeUnixNano: at(2000),
+      spanSets: [
+        { matched: 1, spans: [{ spanID: 'cccccccccccc0002', name: 'simplex.voter.view', attributes: [] }] },
+      ],
+    },
+  ],
+}
+
+const nodeOtlp = (
+  service: string,
+  traceId: string,
+  rootId: string,
+  viewId: string,
+  voteId: string,
+  viewOff: number,
+  viewDur: number,
+) => ({
+  resourceSpans: [
+    {
+      resource: { attributes: [sattr('service.name', service)] },
+      scopeSpans: [
+        {
+          spans: [
+            { traceId, spanId: rootId, name: 'process', startTimeUnixNano: at(0), endTimeUnixNano: at(9_000_000) },
+            {
+              traceId,
+              spanId: viewId,
+              parentSpanId: rootId,
+              name: 'simplex.voter.view',
+              startTimeUnixNano: at(viewOff),
+              endTimeUnixNano: at(viewOff + viewDur),
+              attributes: [sattr('view', '1612')],
+            },
+            {
+              traceId,
+              spanId: voteId,
+              parentSpanId: viewId,
+              name: 'vote',
+              startTimeUnixNano: at(viewOff + 5),
+              endTimeUnixNano: at(viewOff + 5 + Math.floor(viewDur / 2)),
+            },
+          ],
+        },
+      ],
+    },
+  ],
+})
+
+// view offsets are whole ms so the cross-trace alignment math is exact; both
+// traces share t0 (process @ 0), so node-2 enters the view 2ms after node-1.
+const NODE1_OTLP = nodeOtlp('node-1', 'aa01', 'aaaa0000aaaa0001', 'cccccccccccc0001', 'dddd0000dddd0001', 1_000_000, 400_000)
+const NODE2_OTLP = nodeOtlp('node-2', 'bb02', 'aaaa0000aaaa0002', 'cccccccccccc0002', 'dddd0000dddd0002', 3_000_000, 600_000)
+
+describe('handleCompare', () => {
+  beforeEach(() => {
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      if (url.pathname === '/api/search') {
+        return Response.json(COMPARE_SEARCH)
+      }
+      if (url.pathname === '/api/v2/traces/aa01') return Response.json(NODE1_OTLP)
+      if (url.pathname === '/api/v2/traces/bb02') return Response.json(NODE2_OTLP)
+      return new Response('not found', { status: 404 })
+    }) as unknown as typeof fetch
   })
 
-  test('?instance= scoping and ?spanIds=true', async () => {
-    const { body } = await get<AggregateResponse>(
-      handleTraceAggregate,
-      `/api/v1/traces/${TRACE_HEX}/aggregate?instance=node-2&spanIds=true`,
-      { traceId: TRACE_HEX },
+  const compare = (query: string) =>
+    get<WireTrace>(handleCompare, `/api/v1/compare?${query}`, {})
+
+  test('assembles each node onto a shared axis anchored at the earliest start', async () => {
+    const { status, body } = await compare(
+      'name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&from=1749571100&to=1749571300',
     )
-    expect(body.instances).toEqual(['node-2'])
-    const round = body.nodes.find((n) => n.name === 'round')!
-    expect(round.perInstance['node-1']).toBeUndefined()
-    expect(round.spanIds).toEqual({ 'node-2': ['aaaaaaaaaaaa0002'] })
+    expect(status).toBe(200)
+    expect(body.traceId).toBe('compare')
+    // origin = earliest matched start (node-1's view, 1ms into its trace)
+    expect(body.startUnixMs).toBe(Number(T0 / 1_000_000n) + 1)
+    expect(body.instances.map((i) => i.id)).toEqual(['node-1', 'node-2'])
+
+    const rootOf = (id: string) =>
+      body.spans.find((s) => s.spanId === body.instances.find((i) => i.id === id)!.rootSpanIds[0])!
+    for (const id of ['node-1', 'node-2']) {
+      const root = rootOf(id)
+      expect(root.name).toBe('simplex.voter.view')
+      expect(root.parentSpanId).toBeNull()
+      expect(root.instanceId).toBe(id)
+    }
+    // node-1 anchors the axis; node-2 entered 2ms later and is shifted right
+    expect(rootOf('node-1').startNs).toBe(0)
+    expect(rootOf('node-2').startNs).toBe(2_000_000)
+
+    // Ids are instance-prefixed (the two source traces both used cccc...0001/2).
+    expect(body.spans.some((s) => s.spanId.startsWith('node-1::'))).toBe(true)
+    expect(body.spans.some((s) => s.spanId.startsWith('node-2::'))).toBe(true)
+    // process roots are dropped; only each view subtree (view + vote) survives.
+    expect(body.spans.map((s) => s.name).sort()).toEqual([
+      'simplex.voter.view',
+      'simplex.voter.view',
+      'vote',
+      'vote',
+    ])
+    // extent = origin to node-2's late (2ms) 0.6ms view end
+    expect(body.durationNs).toBe(2_600_000)
+
+    // The wire trace hydrates back into a usable model.
+    const model = hydrateTrace(body)
+    expect(model.instances).toHaveLength(2)
+  })
+
+  test('compare/aggregate gives per-node code-path stats over the assembly', async () => {
+    const { status, body } = await get<AggregateResponse>(
+      handleCompareAggregate,
+      '/api/v1/compare/aggregate?name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&from=1749571100&to=1749571300&spanIds=true',
+      {},
+    )
+    expect(status).toBe(200)
+    expect(body.instances).toEqual(['node-1', 'node-2'])
+    const view = body.nodes.find((n) => n.name === 'simplex.voter.view')!
+    expect(view.depth).toBe(0)
+    expect(view.count).toBe(2)
+    expect(view.perInstance['node-1'].maxNs).toBe(400_000)
+    expect(view.perInstance['node-2'].maxNs).toBe(600_000)
+    // spanIds=true surfaces the prefixed matched ids
+    expect(view.spanIds!['node-1']).toEqual(['node-1::cccccccccccc0001'])
+    // vote rides under the view in the merged tree
+    const vote = body.nodes.find((n) => n.name === 'vote')!
+    expect(vote.path).toEqual(['simplex.voter.view', 'vote'])
+    expect(vote.depth).toBe(1)
+  })
+
+  test('no spans matched: empty model carries a warning, not an error', async () => {
+    globalThis.fetch = (async () => Response.json({ traces: [] })) as unknown as typeof fetch
+    const { status, body } = await compare('name=nope&nameRegex=false&from=1749571100&to=1749571300')
+    expect(status).toBe(200)
+    expect(body.instances).toEqual([])
+    expect(body.warnings.some((w) => w.includes('no spans matched'))).toBe(true)
+  })
+
+  test('a span to correlate on is required (400 otherwise)', async () => {
+    const url = new URL('http://x/api/v1/compare?from=1749571100&to=1749571300')
+    try {
+      await handleCompare(new Request(url), url, {}, deps())
+      throw new Error('expected a problem Response')
+    } catch (err) {
+      expect(err).toBeInstanceOf(Response)
+      expect((err as Response).status).toBe(400)
+      const p = (await (err as Response).json()) as ApiProblem
+      expect(p.invalidParams?.[0].name).toBe('name')
+    }
   })
 })
 

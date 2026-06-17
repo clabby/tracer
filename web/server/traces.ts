@@ -1,15 +1,17 @@
 /*
- * Trace handlers: the full wire trace, the pre-flight overview, and the
- * merged-aggregate view. Parsing is the shared lib (`parseTrace` via
- * TempoClient, `buildAggregateTree`); a small TTL cache absorbs the agent
- * pattern overview → aggregate → trace with a single Tempo fetch + parse,
- * inside the same 15s freshness window the Cache-Control header advertises.
+ * Trace handlers: one node's full trace and its pre-flight overview, plus the
+ * cross-node comparison (and its merged aggregate) assembled from separate
+ * per-node traces by `assembleComparison`. Parsing is the shared lib
+ * (`parseTrace` via TempoClient); a small TTL cache absorbs repeat fetches
+ * (overview -> trace, and the per-node fetches a comparison makes) with a
+ * single Tempo fetch + parse inside the 15s window the Cache-Control advertises.
  */
 
-import type { TraceModel } from '../src/lib/model'
-import { buildAggregateTree } from '../src/lib/trace'
-import { flattenAggregate, serializeTrace, type WireTrace } from '../src/lib/wire'
+import type { FilterState, SpanMatch, TimeRange, TraceModel } from '../src/lib/model'
+import { assembleComparison, buildAggregateTree } from '../src/lib/trace'
+import { flattenAggregate, serializeTrace } from '../src/lib/wire'
 import type { AggregateResponse, TraceOverview } from '../src/lib/apischema'
+import { parseSearchQuery } from './params'
 import { badRequest, type InvalidParam } from './problem'
 import { json, type Deps } from './router'
 
@@ -50,29 +52,6 @@ export function clearTraceCache(): void {
   cache.clear()
 }
 
-/**
- * Validate repeated `?instance=` params against the trace's instances.
- * Returns the selected ids (empty = all); throws a self-repairing 400 when
- * an id does not exist in this trace.
- */
-function selectedInstances(url: URL, model: TraceModel): string[] {
-  const requested = url.searchParams.getAll('instance').filter((s) => s !== '')
-  if (requested.length === 0) return []
-  const valid = new Set(model.instances.map((i) => i.id))
-  const errors: InvalidParam[] = []
-  for (const id of requested) {
-    if (!valid.has(id)) {
-      errors.push({
-        name: 'instance',
-        reason: `"${id}" is not an instance of this trace — valid: ${[...valid].join(', ')}`,
-        example: model.instances[0]?.id,
-      })
-    }
-  }
-  if (errors.length > 0) throw badRequest('Unknown instance id(s).', errors)
-  return requested
-}
-
 /** Reject query params other than the listed ones (typos fail loudly). */
 function rejectUnknownParams(url: URL, known: readonly string[]): void {
   const errors: InvalidParam[] = []
@@ -86,71 +65,15 @@ function rejectUnknownParams(url: URL, known: readonly string[]): void {
 
 // ------------------------------------------------------------------ trace --
 
-/**
- * Scope a wire trace to a subset of instances. Cross-instance links are
- * truly severed in BOTH directions: child links to excluded spans are
- * dropped, and kept spans whose parent left with another instance are
- * promoted to instance roots (parentSpanId nulled, depths recomputed) —
- * the same orphan handling the parser applies — so the tree encoding stays
- * a complete forest over the returned spans.
- */
-export function scopeWireTrace(wire: WireTrace, instanceIds: string[]): WireTrace {
-  if (instanceIds.length === 0) return wire
-  const keepInstances = new Set(instanceIds)
-  const keptSpanIds = new Set(
-    wire.spans.filter((s) => keepInstances.has(s.instanceId)).map((s) => s.spanId),
-  )
-
-  const spans = wire.spans
-    .filter((s) => keepInstances.has(s.instanceId))
-    .map((s) => ({
-      ...s,
-      parentSpanId: s.parentSpanId !== null && keptSpanIds.has(s.parentSpanId) ? s.parentSpanId : null,
-      childSpanIds: s.childSpanIds.filter((id) => keptSpanIds.has(id)),
-    }))
-
-  // Recompute depths from the (possibly promoted) roots.
-  const byId = new Map(spans.map((s) => [s.spanId, s]))
-  const queue = spans.filter((s) => s.parentSpanId === null)
-  for (const r of queue) r.depth = 0
-  for (let i = 0; i < queue.length; i++) {
-    const n = queue[i]
-    for (const id of n.childSpanIds) {
-      const child = byId.get(id)
-      if (child === undefined) continue
-      child.depth = n.depth + 1
-      queue.push(child)
-    }
-  }
-
-  const instances = wire.instances
-    .filter((i) => keepInstances.has(i.id))
-    .map((i) => {
-      const mine = spans.filter((s) => s.instanceId === i.id)
-      const roots = mine.filter((s) => s.parentSpanId === null)
-      // Parser contract: instance roots in start-time order.
-      roots.sort((a, b) => a.startNs - b.startNs)
-      return {
-        ...i,
-        rootSpanIds: roots.map((s) => s.spanId),
-        maxDepth: mine.reduce((d, s) => Math.max(d, s.depth), 0),
-      }
-    })
-
-  return { ...wire, instances, spans }
-}
-
 export async function handleTrace(
   _req: Request,
   url: URL,
   params: Record<string, string>,
   deps: Deps,
 ): Promise<Response> {
-  rejectUnknownParams(url, ['instance'])
+  rejectUnknownParams(url, [])
   const { model, at } = await loadTrace(params.traceId, deps)
-  const selected = selectedInstances(url, model)
-  const body: WireTrace = scopeWireTrace(serializeTrace(model), selected)
-  return json(body, 200, cacheHeaders(at))
+  return json(serializeTrace(model), 200, cacheHeaders(at))
 }
 
 // ---------------------------------------------------------------- summary --
@@ -176,34 +99,120 @@ export async function handleTraceSummary(
   return json(body, 200, cacheHeaders(at))
 }
 
-// -------------------------------------------------------------- aggregate --
+// ---------------------------------------------------------------- compare --
 
-export async function handleTraceAggregate(
+/** Synthetic trace id for an assembled comparison (it is not a real trace). */
+const COMPARE_TRACE_ID = 'compare'
+
+/** A comparison needs one span kind to correlate on; reject an empty target. */
+function requireCorrelator(filter: FilterState): void {
+  if (filter.name.trim() === '' && filter.rawQuery.trim() === '') {
+    throw badRequest('A comparison needs a span to correlate on.', [
+      {
+        name: 'name',
+        reason:
+          'give an exact span name (add an `attr` to pin the operation, e.g. attr=span.view=1612) or a raw `q`',
+        example: 'simplex.voter.view',
+      },
+    ])
+  }
+}
+
+/**
+ * Locate the span matching the search filter (a span name plus an attribute) in
+ * each node's own trace and assemble every match's subtree into one synthetic
+ * multi-instance trace: lanes share a time axis anchored at the earliest match,
+ * span ids instance-prefixed. Per-trace fetch failures become warnings rather
+ * than failing the request.
+ */
+async function assembleFromQuery(
+  filter: FilterState,
+  range: TimeRange,
+  deps: Deps,
+): Promise<TraceModel> {
+  const targets = (await deps.tempo.searchTraces(filter, range)).filter(
+    (s) => s.matchedSpanIds.length > 0,
+  )
+  const loaded = await Promise.all(
+    targets.map((s) =>
+      loadTrace(s.traceId, deps)
+        .then(({ model }) => ({ s, model }))
+        .catch((err) => ({ s, err: err instanceof Error ? err.message : String(err) })),
+    ),
+  )
+
+  const matches: SpanMatch[] = []
+  const warnings: string[] = []
+  const usedIds = new Set<string>()
+  for (const entry of loaded) {
+    if ('err' in entry) {
+      warnings.push(`trace ${entry.s.traceId}: ${entry.err}`)
+      continue
+    }
+    const byInstance = new Map(entry.model.instances.map((i) => [i.id, i]))
+    for (const spanId of entry.s.matchedSpanIds) {
+      const root = entry.model.spans.get(spanId)
+      if (root === undefined) continue
+      const instance = byInstance.get(root.instanceId)
+      if (instance === undefined) continue
+      let id = instance.id
+      if (usedIds.has(id)) id = `${instance.id}#${entry.s.traceId.slice(0, 6)}`
+      if (usedIds.has(id)) id = `${instance.id}#${root.spanId.slice(0, 8)}`
+      usedIds.add(id)
+      matches.push({ instance: { ...instance, id }, root, startUnixMs: entry.model.startUnixMs })
+    }
+  }
+
+  const model = assembleComparison(matches, COMPARE_TRACE_ID)
+  model.warnings.push(...warnings)
+  if (matches.length === 0) {
+    const what = filter.name.trim() !== '' ? `name "${filter.name.trim()}"` : 'the query'
+    model.warnings.push(`no spans matched ${what} with these filters in this range`)
+  }
+  return model
+}
+
+/**
+ * Compare one span across nodes whose traces are SEPARATE. Returns the same
+ * `WireTrace` shape as GET /traces/:id (one lane per node, aligned on the
+ * earliest match's start), so the flame/stats/heatmap views render it directly.
+ */
+export async function handleCompare(
   _req: Request,
   url: URL,
-  params: Record<string, string>,
+  _params: Record<string, string>,
   deps: Deps,
 ): Promise<Response> {
-  rejectUnknownParams(url, ['instance', 'spanIds'])
-  const { model, at } = await loadTrace(params.traceId, deps)
-  const selected = selectedInstances(url, model)
+  const { filter, range } = parseSearchQuery(url)
+  requireCorrelator(filter)
+  const model = await assembleFromQuery(filter, range, deps)
+  return json(serializeTrace(model), 200)
+}
 
+/**
+ * The merged aggregate of a comparison: the assembled multi-instance trace
+ * grouped by name-path, with per-instance duration/error stats for every node
+ * at each path. Compact cross-node code-path stats without downloading spans.
+ */
+export async function handleCompareAggregate(
+  _req: Request,
+  url: URL,
+  _params: Record<string, string>,
+  deps: Deps,
+): Promise<Response> {
+  const { filter, range } = parseSearchQuery(url, ['spanIds'])
+  requireCorrelator(filter)
   const spanIdsRaw = url.searchParams.get('spanIds')
   if (spanIdsRaw !== null && spanIdsRaw !== 'true' && spanIdsRaw !== 'false') {
     throw badRequest('Invalid spanIds parameter.', [
       { name: 'spanIds', reason: `expected "true" or "false", got "${spanIdsRaw}"`, example: 'true' },
     ])
   }
-
-  const included =
-    selected.length === 0 ? model.instances.map((i) => i.id) : selected
-  const keep = new Set(included)
-  const hidden = new Set(model.instances.map((i) => i.id).filter((id) => !keep.has(id)))
-
+  const model = await assembleFromQuery(filter, range, deps)
   const body: AggregateResponse = {
     traceId: model.traceId,
-    instances: included,
-    nodes: flattenAggregate(buildAggregateTree(model, hidden), spanIdsRaw === 'true'),
+    instances: model.instances.map((i) => i.id),
+    nodes: flattenAggregate(buildAggregateTree(model, new Set()), spanIdsRaw === 'true'),
   }
-  return json(body, 200, cacheHeaders(at))
+  return json(body, 200)
 }

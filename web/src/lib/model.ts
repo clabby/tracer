@@ -125,6 +125,25 @@ export interface TraceModel {
   warnings: string[]
 }
 
+// ------------------------------------------------------------ comparison --
+
+/**
+ * One node's contribution to a cross-trace comparison: the span that matched
+ * the compare query (a span name plus an attribute) and the `Instance` that
+ * emitted it. Each match's subtree becomes one lane in the assembled
+ * comparison trace.
+ */
+export interface SpanMatch {
+  instance: Instance
+  root: SpanNode
+  /**
+   * Epoch ms of the source trace's earliest span, used to place this lane on
+   * the shared time axis: the root's absolute start is
+   * `startUnixMs + root.startNs / 1e6`.
+   */
+  startUnixMs: number
+}
+
 // ----------------------------------------------------- aggregated flame --
 
 /**
@@ -294,6 +313,8 @@ export interface SearchPanelProps {
   range: RangeSelection
   onRangeChange: (r: RangeSelection) => void
   onSearch: () => void
+  /** Assemble a cross-instance comparison of the current span name + attrs. */
+  onCompare: () => void
   searching: boolean
   client: ITempoClient
 }

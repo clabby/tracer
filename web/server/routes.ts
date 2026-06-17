@@ -7,7 +7,7 @@
 import type { RouteDef, RouteParamDoc } from './router'
 import { handleHealth } from './misc'
 import { handleCompile, handleSearchEvents, handleSearchTraces } from './search'
-import { handleTrace, handleTraceAggregate, handleTraceSummary } from './traces'
+import { handleCompare, handleCompareAggregate, handleTrace, handleTraceSummary } from './traces'
 import { handleTagNames, handleTagValues } from './tags'
 
 /** The flat GET search dialect, shared by both search routes. */
@@ -154,6 +154,38 @@ export const ROUTES: RouteDef[] = [
   },
   {
     method: 'GET',
+    pattern: '/api/v1/compare',
+    operationId: 'compareBySpan',
+    summary:
+      'Compare ONE span across nodes by correlating it in each node\'s own trace. Runs the search dialect to locate the matching span (give an exact `name` plus an `attr` that pins the operation, e.g. name=simplex.voter.view&nameRegex=false&attr=span.view=1612), then assembles each match\'s subtree into one multi-instance trace whose lanes share a time axis anchored at the EARLIEST matched span, so each node\'s start skew is visible. The response is the same shape as GET /traces/:id, so the flame/stats/heatmap views render it directly.',
+    params: SEARCH_QUERY_PARAMS,
+    responseSchema: 'wireTraceSchema',
+    example:
+      "curl -s 'http://localhost:8080/api/v1/compare?name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&since=1h'",
+    handler: handleCompare,
+  },
+  {
+    method: 'GET',
+    pattern: '/api/v1/compare/aggregate',
+    operationId: 'compareAggregate',
+    summary:
+      'The merged ("aggregate") flame tree of a comparison: the same span correlated across nodes (search dialect, e.g. name=simplex.voter.view&nameRegex=false&attr=span.view=1612), assembled and grouped by name-path with per-instance duration/error stats. The cross-node code-path view — compare the same path across every node without downloading spans.',
+    params: [
+      ...SEARCH_QUERY_PARAMS,
+      {
+        name: 'spanIds',
+        in: 'query',
+        description: 'Include per-instance matching span ids on every node (default false).',
+        example: 'true',
+      },
+    ],
+    responseSchema: 'aggregateResponseSchema',
+    example:
+      "curl -s 'http://localhost:8080/api/v1/compare/aggregate?name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&since=1h'",
+    handler: handleCompareAggregate,
+  },
+  {
+    method: 'GET',
     pattern: '/api/v1/traceql/compile',
     operationId: 'compileTraceql',
     summary:
@@ -187,7 +219,7 @@ export const ROUTES: RouteDef[] = [
     pattern: '/api/v1/traces/:traceId/summary',
     operationId: 'getTraceSummary',
     summary:
-      'Pre-flight overview of one trace: duration, span/event counts, and per-instance rollups (spanCount, errorCount, start/end extents) WITHOUT any span payload. Answers "which node was slowest / erroring" in one small response — fetch this before deciding to download the full trace.',
+      'Pre-flight overview of one trace (one node): duration, span/event counts, and rollups (spanCount, errorCount, start/end extents) WITHOUT any span payload. Fetch this before deciding to download the full trace; use /compare/aggregate to compare a span across nodes.',
     params: [
       { name: 'traceId', in: 'path', description: 'Trace id (hex; base64 also accepted).' },
     ],
@@ -197,44 +229,12 @@ export const ROUTES: RouteDef[] = [
   },
   {
     method: 'GET',
-    pattern: '/api/v1/traces/:traceId/aggregate',
-    operationId: 'getTraceAggregate',
-    summary:
-      'The merged ("aggregate") flame tree: spans from all instances grouped by name-path (the same methodology as the UI\'s merged flame), flattened to pre-ordered nodes with per-instance duration/error stats. Compare one code path across every node without downloading spans.',
-    params: [
-      { name: 'traceId', in: 'path', description: 'Trace id (hex; base64 also accepted).' },
-      {
-        name: 'instance',
-        in: 'query',
-        description: 'Limit the aggregation to these instance ids. Repeatable; omit for all.',
-        example: 'node-1',
-      },
-      {
-        name: 'spanIds',
-        in: 'query',
-        description: 'Include per-instance matching span ids on every node (default false).',
-        example: 'true',
-      },
-    ],
-    responseSchema: 'aggregateResponseSchema',
-    example:
-      'curl -s http://localhost:8080/api/v1/traces/0af7651916cd43dd8448eb211c80319c/aggregate',
-    handler: handleTraceAggregate,
-  },
-  {
-    method: 'GET',
     pattern: '/api/v1/traces/:traceId',
     operationId: 'getTrace',
     summary:
-      'One fully parsed trace: instance-split, span-deduplicated, with the tree encoded as parentSpanId/childSpanIds over a flat span list (times in ns relative to startUnixMs). The complete payload — prefer /summary and /aggregate when you only need rollups.',
+      'One fully parsed trace: span-deduplicated, with the tree encoded as parentSpanId/childSpanIds over a flat span list (times in ns relative to startUnixMs). A trace is one node\'s work — prefer /summary for rollups, and /compare to view a span across nodes.',
     params: [
       { name: 'traceId', in: 'path', description: 'Trace id (hex; base64 also accepted).' },
-      {
-        name: 'instance',
-        in: 'query',
-        description: 'Return only these instance ids (links to excluded spans are severed). Repeatable.',
-        example: 'node-1',
-      },
     ],
     responseSchema: 'wireTraceSchema',
     example: 'curl -s http://localhost:8080/api/v1/traces/0af7651916cd43dd8448eb211c80319c',

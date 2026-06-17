@@ -16,6 +16,7 @@ import {
   type Level,
   type SpanEvent,
   type SpanKind,
+  type SpanMatch,
   type SpanNode,
   type SpanStatus,
   type TraceModel,
@@ -539,4 +540,108 @@ export function buildAggregateTree(model: TraceModel, hidden: ReadonlySet<string
   }
   if (rootSpans.length > 0) aggregateInto(root, rootSpans, hidden)
   return root
+}
+
+// --------------------------------------------------------- comparison --
+
+/**
+ * Assemble per-node span matches into one synthetic multi-instance trace for
+ * side-by-side comparison. The shared time axis is anchored at the EARLIEST
+ * matched span across all nodes; each lane is then offset by that node's real
+ * skew, so a node that entered the operation late renders shifted right rather
+ * than left-aligned. Span ids are prefixed with the instance id so ids drawn
+ * from separate source traces never collide. The result is a normal
+ * `TraceModel` that the flame, stats, and heatmap views render directly.
+ *
+ * Inter-lane offsets pass through the millisecond-domain `startUnixMs`, so skew
+ * is accurate to well under a microsecond (within-lane offsets stay exact).
+ *
+ * Callers must pass matches whose `instance.id`s are unique; the prefix relies
+ * on it to keep span ids globally distinct.
+ */
+export function assembleComparison(matches: SpanMatch[], traceId: string): TraceModel {
+  const spans = new Map<string, SpanNode>()
+  const events: SpanEvent[] = []
+  const instances: Instance[] = []
+  let durationNs = 0
+
+  // Absolute start of a match's root (epoch ms) and the shared origin.
+  const absMs = (m: SpanMatch): number => m.startUnixMs + m.root.startNs / 1e6
+  const originMs = matches.reduce((min, m) => Math.min(min, absMs(m)), Infinity)
+
+  for (const match of matches) {
+    const { instance, root } = match
+    const instanceId = instance.id
+    const prefix = (id: string): string => `${instanceId}::${id}`
+    const baseDepth = root.depth
+    const laneOffsetNs = Math.round((absMs(match) - originMs) * 1e6)
+    // Map a source time (relative to the node's own trace) onto the shared axis.
+    const reb = (t: number): number => laneOffsetNs + (t - root.startNs)
+
+    // Collect the matched span and its descendants. The parser guarantees
+    // `children` is a true forest, so this plain stack walk terminates.
+    const subtree: SpanNode[] = []
+    const stack: SpanNode[] = [root]
+    while (stack.length > 0) {
+      const n = stack.pop()
+      if (n === undefined) continue
+      subtree.push(n)
+      for (const c of n.children) stack.push(c)
+    }
+
+    const cloned = new Map<string, SpanNode>()
+    let maxDepth = 0
+    for (const n of subtree) {
+      const isRoot = n.spanId === root.spanId
+      const startNs = reb(n.startNs)
+      const depth = n.depth - baseDepth
+      if (depth > maxDepth) maxDepth = depth
+      if (startNs + n.durationNs > durationNs) durationNs = startNs + n.durationNs
+      const node: SpanNode = {
+        ...n,
+        spanId: prefix(n.spanId),
+        parentSpanId: isRoot || n.parentSpanId === null ? null : prefix(n.parentSpanId),
+        startNs,
+        instanceId,
+        depth,
+        events: n.events.map((e) => ({
+          ...e,
+          spanId: prefix(e.spanId),
+          instanceId,
+          timeNs: reb(e.timeNs),
+        })),
+        children: [],
+      }
+      cloned.set(node.spanId, node)
+      spans.set(node.spanId, node)
+      events.push(...node.events)
+    }
+
+    // Re-link children within the cloned subtree (parser sibling order).
+    for (const node of cloned.values()) {
+      if (node.parentSpanId === null) continue
+      cloned.get(node.parentSpanId)?.children.push(node)
+    }
+    for (const node of cloned.values()) node.children.sort((a, b) => a.startNs - b.startNs)
+
+    const clonedRoot = cloned.get(prefix(root.spanId))
+    if (clonedRoot === undefined) continue
+    instances.push({
+      id: instanceId,
+      serviceName: instance.serviceName,
+      instanceTag: instance.instanceTag,
+      colorIndex: instance.colorIndex,
+      spanCount: subtree.length,
+      rootSpans: [clonedRoot],
+      maxDepth,
+    })
+  }
+
+  events.sort((a, b) => a.timeNs - b.timeNs)
+  instances.sort(
+    (a, b) => naturalCompare(a.serviceName, b.serviceName) || naturalCompare(a.id, b.id),
+  )
+
+  const startUnixMs = Number.isFinite(originMs) ? originMs : 0
+  return { traceId, startUnixMs, durationNs, instances, spans, events, warnings: [] }
 }

@@ -183,7 +183,7 @@ export const wireInstanceSchema = {
 
 export const wireTraceSchema = {
   description:
-    'A fully parsed trace: spans from every instance (node) that contributed, deduplicated and split per instance. Span times are nanoseconds relative to `startUnixMs`.',
+    'A fully parsed trace: a flat span list with the tree encoded by parentSpanId/childSpanIds. From /traces/:id it is one node; from /compare it is the same span assembled across nodes (one instance per node) on a shared time axis anchored at the earliest node, so start skew is visible. Span times are nanoseconds relative to `startUnixMs`.',
   type: 'object',
   additionalProperties: false,
   properties: {

@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faFileExport, faMoon, faSun } from '@fortawesome/free-solid-svg-icons'
-import { ApiClient } from './api/client'
+import { ApiClient, buildCompareQuery } from './api/client'
 import EventDetails from './components/EventDetails'
 import ExportModal from './components/ExportModal'
 import EventsView from './components/EventsView'
@@ -28,11 +28,18 @@ import './App.css'
 
 // ----------------------------------------------------------------- routing --
 
-type Route = { view: 'search' } | { view: 'trace'; traceId: string }
+type Route =
+  | { view: 'search' }
+  | { view: 'trace'; traceId: string }
+  | { view: 'compare'; query: string }
 
 function parseHash(): Route {
-  const m = /^#\/trace\/([0-9a-fA-F]+)/.exec(window.location.hash)
-  return m ? { view: 'trace', traceId: m[1].toLowerCase() } : { view: 'search' }
+  const hash = window.location.hash
+  const tm = /^#\/trace\/([0-9a-fA-F]+)/.exec(hash)
+  if (tm) return { view: 'trace', traceId: tm[1].toLowerCase() }
+  const cm = /^#\/compare(?:\?(.*))?$/.exec(hash)
+  if (cm) return { view: 'compare', query: cm[1] ?? '' }
+  return { view: 'search' }
 }
 
 function useRoute(): [Route, (r: Route) => void] {
@@ -43,7 +50,12 @@ function useRoute(): [Route, (r: Route) => void] {
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
   const navigate = useCallback((r: Route) => {
-    window.location.hash = r.view === 'trace' ? `/trace/${r.traceId}` : '/search'
+    window.location.hash =
+      r.view === 'trace'
+        ? `/trace/${r.traceId}`
+        : r.view === 'compare'
+          ? `/compare?${r.query}`
+          : '/search'
   }, [])
   return [route, navigate]
 }
@@ -143,6 +155,14 @@ export default function App() {
     }))
   }, [])
 
+  // Compare the current span name + attributes across instances: snapshot the
+  // draft filter and resolved range into the URL hash and switch to the
+  // comparison view (which assembles one synthetic multi-instance trace).
+  const onCompare = useCallback(() => {
+    const query = buildCompareQuery(filterRef.current, resolveRange(rangeRef.current, Date.now()))
+    navigate({ view: 'compare', query })
+  }, [navigate])
+
   // Switching the results tab re-submits the current filter for the new
   // target right away.
   const onTargetChange = useCallback(
@@ -195,7 +215,19 @@ export default function App() {
     queryFn: () => client.fetchTrace(traceId!),
     enabled: traceId !== null,
   })
-  const model = trace.data ?? null
+
+  // The comparison view assembles its own synthetic trace from the hash query.
+  const compareQuery = route.view === 'compare' ? route.query : null
+  const compare = useQuery({
+    queryKey: ['compare', compareQuery],
+    queryFn: () => client.compareByQuery(compareQuery!),
+    enabled: compareQuery !== null,
+  })
+
+  // Both views feed the same trace UI; `viewKey` identifies the current one.
+  const active = route.view === 'compare' ? compare : trace
+  const model = active.data ?? null
+  const viewKey = route.view === 'compare' ? `compare:${route.query}` : traceId
 
   const [tab, setTab] = useState<'flame' | 'events' | 'stats' | 'heatmap'>('flame')
   // The details pane shows either a span or an event.
@@ -234,17 +266,17 @@ export default function App() {
     )
   }, [model])
 
-  // Reset per-trace UI state when switching traces.
-  const lastTraceRef = useRef<string | null>(null)
+  // Reset per-trace UI state when switching traces or comparisons.
+  const lastViewRef = useRef<string | null>(null)
   useEffect(() => {
-    if (traceId !== lastTraceRef.current) {
-      lastTraceRef.current = traceId
+    if (viewKey !== lastViewRef.current) {
+      lastViewRef.current = viewKey
       setSelected(null)
       setHiddenInstances(new Set())
       setExportOpen(false)
       setTab('flame')
     }
-  }, [traceId])
+  }, [viewKey])
 
   // When a trace is opened from search results, carry the search context in:
   // hide instances the service filter excluded. Opening an EVENT result also
@@ -320,6 +352,14 @@ export default function App() {
           </div>
         )}
 
+        {route.view === 'compare' && (
+          <div className="app-tracebar">
+            <span className="app-traceid" title="cross-instance comparison">
+              compare
+            </span>
+          </div>
+        )}
+
         <div className="app-topbar-spacer" />
 
         <div className="app-topbar-end">
@@ -349,6 +389,7 @@ export default function App() {
             range={range}
             onRangeChange={onRangeChange}
             onSearch={onSearch}
+            onCompare={onCompare}
             searching={search.isFetching}
             client={client}
           />
@@ -371,19 +412,25 @@ export default function App() {
           />
         </main>
       ) : (
-        <main className="app-main app-trace view-fade" key={route.traceId}>
-          {trace.isLoading && (
+        <main className="app-main app-trace view-fade" key={viewKey ?? 'view'}>
+          {active.isLoading && (
             <div className="empty-state">
               <div className="spinner" />
-              loading trace…
+              {route.view === 'compare' ? 'assembling comparison…' : 'loading trace…'}
             </div>
           )}
-          {trace.error != null && (
+          {active.error != null && (
             <div className="empty-state app-error">
-              failed to load trace: {String(trace.error)}
+              {route.view === 'compare' ? 'failed to assemble comparison: ' : 'failed to load trace: '}
+              {String(active.error)}
             </div>
           )}
-          {model && (
+          {model && model.instances.length === 0 && (
+            <div className="empty-state">
+              {model.warnings[0] ?? 'no spans matched this comparison'}
+            </div>
+          )}
+          {model && model.instances.length > 0 && (
             <>
               <div className="app-trace-toolbar">
                 <div className="app-tabs">
