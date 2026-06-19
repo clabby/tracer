@@ -16,8 +16,11 @@ describe('canCompareFilter', () => {
 
   test('needs an exact span name plus a pinning span attribute', () => {
     expect(canCompareFilter('spans', DEFAULT_FILTER)).toBe(false)
-    expect(canCompareFilter('spans', { ...comparable, nameIsRegex: true })).toBe(false)
     expect(canCompareFilter('spans', { ...comparable, rawQuery: '{ name = "round" }' })).toBe(false)
     expect(canCompareFilter('spans', { ...comparable, attrs: [] })).toBe(false)
+  })
+
+  test('lets the UI compare a default regex-mode name as exact text', () => {
+    expect(canCompareFilter('spans', { ...comparable, nameIsRegex: true })).toBe(true)
   })
 })

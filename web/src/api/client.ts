@@ -57,7 +57,7 @@ export function buildCompareQuery(filter: FilterState, range: TimeRange): string
   const p = new URLSearchParams()
   for (const s of f.services) p.append('service', s)
   if (f.name.trim() !== '') p.set('name', f.name)
-  p.set('nameRegex', String(f.nameIsRegex))
+  p.set('nameRegex', 'false')
   for (const l of f.levels) p.append('level', l)
   if (f.errorsOnly) p.set('errorsOnly', 'true')
   if (f.minDuration.trim() !== '') p.set('minDuration', f.minDuration)

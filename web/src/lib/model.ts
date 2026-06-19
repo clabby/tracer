@@ -226,7 +226,6 @@ export function canCompareFilter(target: SearchTarget, filter: FilterState): boo
   if (target !== 'spans') return false
   if (filter.rawQuery.trim() !== '') return false
   if (filter.name.trim() === '') return false
-  if (filter.nameIsRegex) return false
   return hasComparePinningAttr(filter)
 }
 

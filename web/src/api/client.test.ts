@@ -66,6 +66,21 @@ describe('buildCompareQuery', () => {
     expect(p.get('to')).toBe('1749571301')
   })
 
+  test('compares the UI name text exactly even when search used regex mode', () => {
+    const q = buildCompareQuery(
+      {
+        ...base,
+        name: 'round',
+        nameIsRegex: true,
+        attrs: [{ id: 'a', scope: 'span', key: 'height', op: '=', value: '42' }],
+      },
+      { from: 1, to: 2 },
+    )
+    const p = new URLSearchParams(q)
+    expect(p.get('name')).toBe('round')
+    expect(p.get('nameRegex')).toBe('false')
+  })
+
   test('drops draft noise so a UI search compares cleanly', () => {
     const q = buildCompareQuery(
       {
