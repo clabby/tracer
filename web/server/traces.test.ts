@@ -302,7 +302,7 @@ describe('handleCompare', () => {
     )
     expect(body.instances.map((i) => i.id)).toEqual(['node-1', 'node-2'])
     expect(lastSearchUrl?.searchParams.get('limit')).toBe('1000')
-    expect(lastSearchUrl?.searchParams.get('spss')).toBe('1000')
+    expect(lastSearchUrl?.searchParams.get('spss')).toBe('100')
   })
 
   test('compare does not assemble multiple node matches from one trace id', async () => {

@@ -21,6 +21,7 @@ import { parseTrace } from '../lib/trace'
 
 const TIMEOUT_MS = 15_000
 const BODY_EXCERPT_CHARS = 256
+const MAX_SPANS_PER_SPAN_SET = 100
 
 /** Pipeline suffix appended to event searches (exported so the API server's
  * query echo states exactly what was executed). */
@@ -171,7 +172,7 @@ export class TempoClient implements ITempoClient {
       start: String(w.from),
       end: String(w.to),
       limit: String(limit),
-      spss: String(limit),
+      spss: String(Math.min(limit, MAX_SPANS_PER_SPAN_SET)),
     })
     const data = await this.getJson(`/api/search?${params.toString()}`)
     const traces =
