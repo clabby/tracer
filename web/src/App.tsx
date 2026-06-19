@@ -208,6 +208,13 @@ export default function App() {
   })
   const queryTraces = search.data?.kind === 'spans' ? search.data.rows : null
   const queryEvents = search.data?.kind === 'events' ? search.data.rows : null
+  const submittedCompareQuery = useMemo(
+    () =>
+      submitted.target === 'spans' && canCompareFilter('spans', submitted.filter)
+        ? buildCompareQuery(submitted.filter, submitted.range)
+        : null,
+    [submitted],
+  )
 
   // -------------------------------------------------------------- trace --
 
@@ -300,6 +307,11 @@ export default function App() {
     },
     [navigate, submitted],
   )
+
+  const openSubmittedCompare = useCallback(() => {
+    if (submittedCompareQuery === null) return
+    navigate({ view: 'compare', query: submittedCompareQuery })
+  }, [navigate, submittedCompareQuery])
 
   const openEvent = useCallback(
     (e: EventSummary) => {
@@ -400,12 +412,14 @@ export default function App() {
             onTargetChange={onTargetChange}
             results={queryTraces}
             events={queryEvents}
+            compareQuery={submittedCompareQuery}
             loading={
               search.isLoading ||
               (search.isFetching && search.data?.kind !== submitted.target)
             }
             error={search.error ? String(search.error) : null}
             onOpen={openTrace}
+            onOpenCompare={openSubmittedCompare}
             onOpenEvent={openEvent}
             refreshing={search.isFetching}
             refreshSec={refreshSec}

@@ -11,6 +11,7 @@ import {
   formatNs,
   shortId,
 } from '../lib/format'
+import { groupTraceSummaries } from '../lib/searchResults'
 import Select from './Select'
 import './TraceList.css'
 
@@ -55,17 +56,19 @@ type SortOrder = 'recent' | 'slowest' | 'spans'
 
 function Row({
   trace,
-  onOpen,
+  onClick,
   maxMs,
+  traceLabel,
 }: {
   trace: TraceSummary
-  onOpen: (traceId: string) => void
+  onClick: () => void
   maxMs: number
+  traceLabel?: string
 }) {
   return (
-    <tr onClick={() => onOpen(trace.traceId)}>
+    <tr onClick={onClick}>
       <td className="tl-id mono-num" title={trace.traceId}>
-        {shortId(trace.traceId)}
+        {traceLabel ?? shortId(trace.traceId)}
       </td>
       <td className="tl-name">
         {trace.rootTraceName}
@@ -149,9 +152,11 @@ export default function TraceList({
   onTargetChange,
   results,
   events,
+  compareQuery,
   loading,
   error,
   onOpen,
+  onOpenCompare,
   onOpenEvent,
   refreshing,
   refreshSec,
@@ -159,21 +164,26 @@ export default function TraceList({
   onRefresh,
 }: TraceListProps) {
   const forEvents = target === 'events'
-  const count = forEvents ? events?.length : results?.length
   const hasRows = forEvents ? events !== null : results !== null
 
   const [order, setOrder] = useState<SortOrder>('recent')
+  const compareGroup = useMemo(
+    () => (compareQuery !== null && results !== null ? groupTraceSummaries(results) : null),
+    [compareQuery, results],
+  )
+  const displayResults = compareGroup !== null ? [compareGroup] : results
+  const count = forEvents ? events?.length : displayResults?.length
   const maxMs = useMemo(
-    () => (results ? Math.max(1, ...results.map((t) => t.durationMs)) : 1),
-    [results],
+    () => (displayResults ? Math.max(1, ...displayResults.map((t) => t.durationMs)) : 1),
+    [displayResults],
   )
   const ordered = useMemo(() => {
-    if (!results) return results
-    if (order === 'recent') return results
-    const r = [...results]
+    if (!displayResults) return displayResults
+    if (order === 'recent') return displayResults
+    const r = [...displayResults]
     r.sort((a, b) => (order === 'slowest' ? b.durationMs - a.durationMs : b.spanCount - a.spanCount))
     return r
-  }, [results, order])
+  }, [displayResults, order])
 
   let body: ReactNode
   if (loading) {
@@ -233,7 +243,13 @@ export default function TraceList({
           </thead>
           <tbody>
             {ordered!.map((t) => (
-              <Row key={t.traceId} trace={t} onOpen={onOpen} maxMs={maxMs} />
+              <Row
+                key={compareGroup === null ? t.traceId : compareQuery!}
+                trace={t}
+                traceLabel={compareGroup === null ? undefined : 'compare'}
+                onClick={compareGroup === null ? () => onOpen(t.traceId) : onOpenCompare}
+                maxMs={maxMs}
+              />
             ))}
           </tbody>
         </table>

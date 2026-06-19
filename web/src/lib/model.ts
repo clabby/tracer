@@ -342,9 +342,12 @@ export interface TraceListProps {
   results: TraceSummary[] | null
   /** Event results, shown when target === 'events'. */
   events: EventSummary[] | null
+  /** Non-null when span rows can be represented as one comparison result. */
+  compareQuery: string | null
   loading: boolean
   error: string | null
   onOpen: (traceId: string) => void
+  onOpenCompare: () => void
   /** Open an event result: navigate to its trace with the event focused. */
   onOpenEvent: (event: EventSummary) => void
   /** True while a refetch is in flight (initial load uses `loading`). */
