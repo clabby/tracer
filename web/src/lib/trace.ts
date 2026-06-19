@@ -79,7 +79,7 @@ function flattenAttrValue(v: unknown): AttrPrimitive | null {
 }
 
 /** Parse an OTLP attribute list (`[{key, value}]`) into flat `Attributes`. */
-function parseAttributes(raw: unknown): Attributes {
+export function parseAttributes(raw: unknown): Attributes {
   const out: Attributes = {}
   if (!Array.isArray(raw)) return out
   for (const entry of raw) {

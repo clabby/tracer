@@ -81,6 +81,22 @@ describe('buildCompareQuery', () => {
     expect(p.get('nameRegex')).toBe('false')
   })
 
+  test('serializes event compare target when requested', () => {
+    const q = buildCompareQuery(
+      {
+        ...base,
+        name: 'commit.done',
+        attrs: [{ id: 'a', scope: 'span', key: 'height', op: '=', value: '42' }],
+      },
+      { from: 1, to: 2 },
+      'events',
+    )
+    const p = new URLSearchParams(q)
+    expect(p.get('target')).toBe('events')
+    expect(p.get('name')).toBe('commit.done')
+    expect(p.get('nameRegex')).toBe('false')
+  })
+
   test('drops draft noise so a UI search compares cleanly', () => {
     const q = buildCompareQuery(
       {

@@ -50,6 +50,18 @@ const attributes = {
   additionalProperties: { type: ['string', 'number', 'boolean'] },
 } as const
 
+const matchedSpanSummarySchema = {
+  description: 'One span matched by a trace search row.',
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    spanId: { type: 'string', description: 'Matched span id, lowercase hex.' },
+    name: { type: 'string', description: 'Matched span name.' },
+    attributes,
+  },
+  required: ['spanId', 'name', 'attributes'],
+} as const
+
 // ------------------------------------------------------------ trace shapes --
 
 export const spanEventSchema = {
@@ -239,6 +251,11 @@ export const traceSummarySchema = {
       description: 'Name of each matched span, one entry per span (duplicates expected).',
       items: { type: 'string' },
     },
+    matchedSpans: {
+      type: 'array',
+      description: 'Matched spans with attributes returned by Tempo for the span set.',
+      items: matchedSpanSummarySchema,
+    },
   },
   required: [
     'traceId',
@@ -250,6 +267,7 @@ export const traceSummarySchema = {
     'services',
     'matchedSpanIds',
     'matchedSpanNames',
+    'matchedSpans',
   ],
 } as const
 
@@ -267,6 +285,7 @@ export const eventSummarySchema = {
     serviceName: { type: 'string', description: "Owning span's service name." },
     spanStartUnixMs: { type: 'number', description: "Owning span's start, epoch milliseconds." },
     spanDurationNs: { type: 'number', description: "Owning span's duration in nanoseconds." },
+    attributes,
   },
   required: [
     'traceId',
@@ -277,6 +296,7 @@ export const eventSummarySchema = {
     'serviceName',
     'spanStartUnixMs',
     'spanDurationNs',
+    'attributes',
   ],
 } as const
 

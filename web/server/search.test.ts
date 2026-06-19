@@ -21,6 +21,8 @@ const deps = (): Deps => ({
   config: { port: 8080, tempoUrl: 'http://tempo.test', staticDir: null },
 })
 
+const iattr = (key: string, intValue: string) => ({ key, value: { intValue } })
+
 function mockTempoSearch(traces: unknown[]): { queries: string[] } {
   const seen = { queries: [] as string[] }
   globalThis.fetch = (async (input: string | URL | Request) => {
@@ -40,7 +42,10 @@ const rawTrace = (id: string, startMs: number) => ({
   rootTraceName: 'round',
   startTimeUnixNano: String(BigInt(startMs) * 1_000_000n),
   durationMs: 12,
-  spanSets: [{ matched: 3 }],
+  spanSets: [{
+    matched: 3,
+    spans: [{ spanID: `${id}0001`, name: 'round', attributes: [iattr('height', '42')] }],
+  }],
   serviceStats: { 'node-1': {}, 'node-2': {} },
 })
 
@@ -56,6 +61,7 @@ describe('handleSearchTraces', () => {
     expect(body.traces.map((t) => t.traceId)).toEqual(['aa11', 'bb22']) // newest-first, deduped
     expect(body.traces[0].services).toEqual(['node-1', 'node-2'])
     expect(body.traces[0].spanCount).toBe(3)
+    expect(body.traces[0].matchedSpans[0].attributes.height).toBe(42)
     expect(body.query.traceql).toBe('{ status = error }')
     expect(body.query.limit).toBe(10)
     expect(seen.queries.length).toBeGreaterThan(1) // windowed fan-out happened

@@ -11,7 +11,6 @@ import {
   formatNs,
   shortId,
 } from '../lib/format'
-import { groupTraceSummaries } from '../lib/searchResults'
 import Select from './Select'
 import './TraceList.css'
 
@@ -103,13 +102,15 @@ function Row({
 
 function EventRow({
   event,
-  onOpen,
+  onClick,
+  traceLabel,
 }: {
   event: EventSummary
-  onOpen: (e: EventSummary) => void
+  onClick: () => void
+  traceLabel?: string
 }) {
   return (
-    <tr onClick={() => onOpen(event)}>
+    <tr onClick={onClick}>
       <td className="tl-start" title={formatDateTime(event.spanStartUnixMs)}>
         <span className="mono-num">{formatClock(event.spanStartUnixMs)}</span>
         <span className="tl-ago faint">{formatAgo(event.spanStartUnixMs)}</span>
@@ -133,7 +134,7 @@ function EventRow({
       </td>
       <td className="tl-num mono-num">{formatNs(event.spanDurationNs)}</td>
       <td className="tl-id mono-num" title={event.traceId}>
-        {shortId(event.traceId)}
+        {traceLabel ?? shortId(event.traceId)}
       </td>
     </tr>
   )
@@ -152,7 +153,7 @@ export default function TraceList({
   onTargetChange,
   results,
   events,
-  compareQuery,
+  compareQueries,
   loading,
   error,
   onOpen,
@@ -167,23 +168,18 @@ export default function TraceList({
   const hasRows = forEvents ? events !== null : results !== null
 
   const [order, setOrder] = useState<SortOrder>('recent')
-  const compareGroup = useMemo(
-    () => (compareQuery !== null && results !== null ? groupTraceSummaries(results) : null),
-    [compareQuery, results],
-  )
-  const displayResults = compareGroup !== null ? [compareGroup] : results
-  const count = forEvents ? events?.length : displayResults?.length
+  const count = forEvents ? events?.length : results?.length
   const maxMs = useMemo(
-    () => (displayResults ? Math.max(1, ...displayResults.map((t) => t.durationMs)) : 1),
-    [displayResults],
+    () => (results ? Math.max(1, ...results.map((t) => t.durationMs)) : 1),
+    [results],
   )
   const ordered = useMemo(() => {
-    if (!displayResults) return displayResults
-    if (order === 'recent') return displayResults
-    const r = [...displayResults]
+    if (!results) return results
+    if (order === 'recent') return results
+    const r = [...results]
     r.sort((a, b) => (order === 'slowest' ? b.durationMs - a.durationMs : b.spanCount - a.spanCount))
     return r
-  }, [displayResults, order])
+  }, [results, order])
 
   let body: ReactNode
   if (loading) {
@@ -221,7 +217,16 @@ export default function TraceList({
           </thead>
           <tbody>
             {events!.map((e) => (
-              <EventRow key={eventSummaryKey(e)} event={e} onOpen={onOpenEvent} />
+              <EventRow
+                key={eventSummaryKey(e)}
+                event={e}
+                traceLabel={compareQueries[e.traceId] === undefined ? undefined : 'compare'}
+                onClick={
+                  compareQueries[e.traceId] === undefined
+                    ? () => onOpenEvent(e)
+                    : () => onOpenCompare(compareQueries[e.traceId])
+                }
+              />
             ))}
           </tbody>
         </table>
@@ -244,10 +249,14 @@ export default function TraceList({
           <tbody>
             {ordered!.map((t) => (
               <Row
-                key={compareGroup === null ? t.traceId : compareQuery!}
+                key={t.traceId}
                 trace={t}
-                traceLabel={compareGroup === null ? undefined : 'compare'}
-                onClick={compareGroup === null ? () => onOpen(t.traceId) : onOpenCompare}
+                traceLabel={compareQueries[t.traceId] === undefined ? undefined : 'compare'}
+                onClick={
+                  compareQueries[t.traceId] === undefined
+                    ? () => onOpen(t.traceId)
+                    : () => onOpenCompare(compareQueries[t.traceId])
+                }
                 maxMs={maxMs}
               />
             ))}

@@ -12,6 +12,7 @@ import type {
   EventSummary,
   FilterState,
   ITempoClient,
+  SearchTarget,
   TagScope,
   TimeRange,
   TraceModel,
@@ -52,9 +53,10 @@ export function sanitizeFilter(filter: FilterState): FilterState {
  * that ran in the UI compares cleanly too. The query is stored in the URL hash
  * (`#/compare?...`), making a comparison shareable and reloadable.
  */
-export function buildCompareQuery(filter: FilterState, range: TimeRange): string {
+export function buildCompareQuery(filter: FilterState, range: TimeRange, target: SearchTarget = 'spans'): string {
   const f = sanitizeFilter(filter)
   const p = new URLSearchParams()
+  if (target === 'events') p.set('target', 'events')
   for (const s of f.services) p.append('service', s)
   if (f.name.trim() !== '') p.set('name', f.name)
   p.set('nameRegex', 'false')

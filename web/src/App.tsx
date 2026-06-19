@@ -25,6 +25,7 @@ import {
   type TraceSummary,
 } from './lib/model'
 import { DEFAULT_RANGE, resolveRange } from './lib/range'
+import { groupEventSummaries, groupTraceSummaries } from './lib/searchResults'
 import './App.css'
 
 // ----------------------------------------------------------------- routing --
@@ -208,13 +209,22 @@ export default function App() {
   })
   const queryTraces = search.data?.kind === 'spans' ? search.data.rows : null
   const queryEvents = search.data?.kind === 'events' ? search.data.rows : null
-  const submittedCompareQuery = useMemo(
-    () =>
-      submitted.target === 'spans' && canCompareFilter('spans', submitted.filter)
-        ? buildCompareQuery(submitted.filter, submitted.range)
-        : null,
-    [submitted],
+  const groupedTraces = useMemo(
+    () => (queryTraces === null ? null : groupTraceSummaries(queryTraces, submitted.filter)),
+    [queryTraces, submitted.filter],
   )
+  const groupedEvents = useMemo(
+    () => (queryEvents === null ? null : groupEventSummaries(queryEvents, submitted.filter)),
+    [queryEvents, submitted.filter],
+  )
+  const compareQueries = useMemo(() => {
+    const out: Record<string, string> = {}
+    const groups = groupedTraces?.compares ?? groupedEvents?.compares ?? []
+    for (const group of groups) {
+      out[group.row.traceId] = buildCompareQuery(group.filter, submitted.range, group.target)
+    }
+    return out
+  }, [groupedTraces, groupedEvents, submitted.range])
 
   // -------------------------------------------------------------- trace --
 
@@ -308,10 +318,10 @@ export default function App() {
     [navigate, submitted],
   )
 
-  const openSubmittedCompare = useCallback(() => {
-    if (submittedCompareQuery === null) return
-    navigate({ view: 'compare', query: submittedCompareQuery })
-  }, [navigate, submittedCompareQuery])
+  const openCompare = useCallback(
+    (query: string) => navigate({ view: 'compare', query }),
+    [navigate],
+  )
 
   const openEvent = useCallback(
     (e: EventSummary) => {
@@ -410,16 +420,16 @@ export default function App() {
           <TraceList
             target={target}
             onTargetChange={onTargetChange}
-            results={queryTraces}
-            events={queryEvents}
-            compareQuery={submittedCompareQuery}
+            results={groupedTraces?.rows ?? null}
+            events={groupedEvents?.rows ?? null}
+            compareQueries={compareQueries}
             loading={
               search.isLoading ||
               (search.isFetching && search.data?.kind !== submitted.target)
             }
             error={search.error ? String(search.error) : null}
             onOpen={openTrace}
-            onOpenCompare={openSubmittedCompare}
+            onOpenCompare={openCompare}
             onOpenEvent={openEvent}
             refreshing={search.isFetching}
             refreshSec={refreshSec}

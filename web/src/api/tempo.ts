@@ -17,7 +17,7 @@ import type {
 } from '../lib/model'
 import { eventSummaryKey, levelFromAttributes } from '../lib/model'
 import { buildTraceQL } from '../lib/traceql'
-import { parseTrace } from '../lib/trace'
+import { parseAttributes, parseTrace } from '../lib/trace'
 
 const TIMEOUT_MS = 15_000
 const BODY_EXCERPT_CHARS = 256
@@ -285,6 +285,7 @@ function toSummary(raw: unknown): TraceSummary | null {
   const services = new Set<string>()
   const matchedSpanIds: string[] = []
   const matchedSpanNames: string[] = []
+  const matchedSpans: TraceSummary['matchedSpans'] = []
   for (const ss of spanSets) {
     if (typeof ss !== 'object' || ss === null) continue
     const set = ss as Record<string, unknown>
@@ -295,9 +296,14 @@ function toSummary(raw: unknown): TraceSummary | null {
       for (const span of set.spans) {
         if (typeof span !== 'object' || span === null) continue
         const s = span as Record<string, unknown>
+        const attributes = parseAttributes(s.attributes)
         collectServiceNames(s.attributes, services)
         if (typeof s.spanID === 'string' && s.spanID !== '') {
-          matchedSpanIds.push(s.spanID.toLowerCase())
+          const spanId = s.spanID.toLowerCase()
+          matchedSpanIds.push(spanId)
+          if (typeof s.name === 'string' && s.name !== '') {
+            matchedSpans.push({ spanId, name: s.name, attributes })
+          }
         }
         if (typeof s.name === 'string' && s.name !== '') matchedSpanNames.push(s.name)
       }
@@ -320,6 +326,7 @@ function toSummary(raw: unknown): TraceSummary | null {
     services: [...services].sort(),
     matchedSpanIds: [...new Set(matchedSpanIds)],
     matchedSpanNames,
+    matchedSpans,
   }
 }
 
@@ -362,6 +369,7 @@ function toEventSummaries(raw: unknown): EventSummary[] {
     for (const span of spans) {
       if (typeof span !== 'object' || span === null) continue
       const s = span as Record<string, unknown>
+      const attributes = parseAttributes(s.attributes)
       const spanId = typeof s.spanID === 'string' ? s.spanID.toLowerCase() : ''
       const eventName = attrString(s.attributes, 'event:name')
       if (spanId === '' || eventName === null) continue
@@ -388,6 +396,7 @@ function toEventSummaries(raw: unknown): EventSummary[] {
         serviceName: attrString(s.attributes, 'service.name') ?? '',
         spanStartUnixMs,
         spanDurationNs,
+        attributes,
       })
     }
   }

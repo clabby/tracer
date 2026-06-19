@@ -10,6 +10,7 @@
 import {
   hasComparePinningAttr,
   type FilterState,
+  type SearchTarget,
   type SpanMatch,
   type TimeRange,
   type TraceModel,
@@ -110,8 +111,21 @@ export async function handleTraceSummary(
 /** Synthetic trace id for an assembled comparison (it is not a real trace). */
 const COMPARE_TRACE_ID = 'compare'
 
-/** A comparison needs one span kind to correlate on; reject an empty target. */
-function requireCorrelator(filter: FilterState): void {
+function hasEventComparePinningAttr(filter: FilterState): boolean {
+  return filter.attrs.some((a) => {
+    if (a.scope === 'resource') return false
+    if (a.op !== '=') return false
+    if (a.key.trim() === '') return false
+    return a.value.trim() !== ''
+  })
+}
+
+function parseCompareTarget(url: URL): SearchTarget {
+  return url.searchParams.get('target') === 'events' ? 'events' : 'spans'
+}
+
+/** A comparison needs one operation to correlate on; reject an empty target. */
+function requireCorrelator(filter: FilterState, target: SearchTarget): void {
   const errors: InvalidParam[] = []
   if (filter.rawQuery.trim() !== '') {
     errors.push({
@@ -133,10 +147,14 @@ function requireCorrelator(filter: FilterState): void {
       example: 'false',
     })
   }
-  if (!hasComparePinningAttr(filter)) {
+  const hasPinningAttr =
+    target === 'events' ? hasEventComparePinningAttr(filter) : hasComparePinningAttr(filter)
+  if (!hasPinningAttr) {
     errors.push({
       name: 'attr',
-      reason: 'add one exact span attribute that pins the operation',
+      reason: target === 'events'
+        ? 'add one exact span or event attribute that pins the operation'
+        : 'add one exact span attribute that pins the operation',
       example: 'span.height=42',
     })
   }
@@ -207,6 +225,45 @@ async function assembleFromQuery(
   return model
 }
 
+async function assembleFromEvents(
+  filter: FilterState,
+  range: TimeRange,
+  deps: Deps,
+): Promise<TraceModel> {
+  const targets = await deps.tempo.searchEvents({ ...filter, limit: MAX_LIMIT }, range)
+  const loaded = await Promise.all(
+    targets.map((event) =>
+      loadTrace(event.traceId, deps)
+        .then(({ model }) => ({ event, model }))
+        .catch((err) => ({ event, err: err instanceof Error ? err.message : String(err) })),
+    ),
+  )
+
+  const matches: SpanMatch[] = []
+  const warnings: string[] = []
+  const usedIds = new Set<string>()
+  for (const entry of loaded) {
+    if ('err' in entry) {
+      warnings.push(`trace ${entry.event.traceId}: ${entry.err}`)
+      continue
+    }
+    const root = entry.model.spans.get(entry.event.spanId)
+    if (root === undefined) continue
+    const instance = entry.model.instances.find((i) => i.id === root.instanceId)
+    if (instance === undefined) continue
+    let id = instance.id
+    if (usedIds.has(id)) id = `${instance.id}#${entry.event.traceId.slice(0, 6)}`
+    if (usedIds.has(id)) id = `${instance.id}#${root.spanId.slice(0, 8)}`
+    usedIds.add(id)
+    matches.push({ instance: { ...instance, id }, root, startUnixMs: entry.model.startUnixMs })
+  }
+
+  const model = assembleComparison(matches, COMPARE_TRACE_ID)
+  model.warnings.push(...warnings)
+  if (matches.length === 0) model.warnings.push(`no events matched name "${filter.name.trim()}" with these filters in this range`)
+  return model
+}
+
 /**
  * Compare one span across nodes whose traces are SEPARATE. Returns the same
  * `WireTrace` shape as GET /traces/:id (one lane per node, aligned on the
@@ -218,9 +275,12 @@ export async function handleCompare(
   _params: Record<string, string>,
   deps: Deps,
 ): Promise<Response> {
-  const { filter, range } = parseSearchQuery(url)
-  requireCorrelator(filter)
-  const model = await assembleFromQuery(filter, range, deps)
+  const target = parseCompareTarget(url)
+  const { filter, range } = parseSearchQuery(url, ['target'])
+  requireCorrelator(filter, target)
+  const model = target === 'events'
+    ? await assembleFromEvents(filter, range, deps)
+    : await assembleFromQuery(filter, range, deps)
   return json(serializeTrace(model), 200)
 }
 
@@ -236,7 +296,7 @@ export async function handleCompareAggregate(
   deps: Deps,
 ): Promise<Response> {
   const { filter, range } = parseSearchQuery(url, ['spanIds'])
-  requireCorrelator(filter)
+  requireCorrelator(filter, 'spans')
   const spanIdsRaw = url.searchParams.get('spanIds')
   if (spanIdsRaw !== null && spanIdsRaw !== 'true' && spanIdsRaw !== 'false') {
     throw badRequest('Invalid spanIds parameter.', [

@@ -359,6 +359,55 @@ describe('handleCompare', () => {
     expect(vote.depth).toBe(1)
   })
 
+  test('event compare assembles the owning spans', async () => {
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      if (url.pathname === '/api/search') {
+        return Response.json({
+          traces: [
+            {
+              traceID: 'aa01',
+              startTimeUnixNano: at(1000),
+              spanSets: [{
+                matched: 1,
+                spans: [{
+                  spanID: 'cccccccccccc0001',
+                  name: 'round',
+                  startTimeUnixNano: at(1_000_000),
+                  durationNanos: '400000',
+                  attributes: [sattr('event:name', 'commit.done'), sattr('service.name', 'node-1')],
+                }],
+              }],
+            },
+            {
+              traceID: 'bb02',
+              startTimeUnixNano: at(2000),
+              spanSets: [{
+                matched: 1,
+                spans: [{
+                  spanID: 'cccccccccccc0002',
+                  name: 'round',
+                  startTimeUnixNano: at(3_000_000),
+                  durationNanos: '600000',
+                  attributes: [sattr('event:name', 'commit.done'), sattr('service.name', 'node-2')],
+                }],
+              }],
+            },
+          ],
+        })
+      }
+      if (url.pathname === '/api/v2/traces/aa01') return Response.json(NODE1_OTLP)
+      if (url.pathname === '/api/v2/traces/bb02') return Response.json(NODE2_OTLP)
+      return new Response('not found', { status: 404 })
+    }) as unknown as typeof fetch
+
+    const { body } = await compare(
+      'target=events&name=commit.done&nameRegex=false&attr=span.height%3D42&from=1749571100&to=1749571300',
+    )
+    expect(body.instances.map((i) => i.id)).toEqual(['node-1', 'node-2'])
+    expect(body.spans.filter((s) => s.name === 'round')).toHaveLength(2)
+  })
+
   test('no spans matched: empty model carries a warning, not an error', async () => {
     globalThis.fetch = (async () => Response.json({ traces: [] })) as unknown as typeof fetch
     const { status, body } = await compare(
