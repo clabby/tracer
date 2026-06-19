@@ -213,6 +213,11 @@ export const DEFAULT_FILTER: FilterState = {
   limit: 50,
 }
 
+export function canCompareFilter(target: SearchTarget, filter: FilterState): boolean {
+  if (target !== 'spans') return false
+  return filter.name.trim() !== '' || filter.rawQuery.trim() !== ''
+}
+
 /** Time range in unix seconds. */
 export interface TimeRange {
   from: number

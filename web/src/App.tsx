@@ -15,6 +15,7 @@ import TraceList from './components/TraceList'
 import { shortId } from './lib/format'
 import {
   DEFAULT_FILTER,
+  canCompareFilter,
   type EventSummary,
   type FilterState,
   type RangeSelection,
@@ -159,6 +160,7 @@ export default function App() {
   // draft filter and resolved range into the URL hash and switch to the
   // comparison view (which assembles one synthetic multi-instance trace).
   const onCompare = useCallback(() => {
+    if (!canCompareFilter(targetRef.current, filterRef.current)) return
     const query = buildCompareQuery(filterRef.current, resolveRange(rangeRef.current, Date.now()))
     navigate({ view: 'compare', query })
   }, [navigate])

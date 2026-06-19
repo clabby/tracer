@@ -7,7 +7,7 @@
 import { useMemo, useState } from 'react'
 import type { ChangeEvent, KeyboardEvent } from 'react'
 import type { AttrFilter, AttrOp, FilterState, Level, SearchPanelProps } from '../lib/model'
-import { LEVELS, colorIndexForService, instanceColorVar } from '../lib/model'
+import { LEVELS, canCompareFilter, colorIndexForService, instanceColorVar } from '../lib/model'
 import { clamp, isValidDurationInput, uid } from '../lib/format'
 import { buildTraceQL } from '../lib/traceql'
 import Combobox from './Combobox'
@@ -32,6 +32,7 @@ export default function SearchPanel({
 
   const compiled = useMemo(() => buildTraceQL(filter, target), [filter, target])
   const rawActive = filter.rawQuery.trim() !== ''
+  const canCompare = canCompareFilter(target, filter)
 
   function set(patch: Partial<FilterState>) {
     onChange({ ...filter, ...patch })
@@ -342,8 +343,12 @@ export default function SearchPanel({
         <button
           type="button"
           className="btn btn-ghost sp-compare"
-          disabled={filter.name.trim() === '' && filter.rawQuery.trim() === ''}
-          title="assemble the matching span across every node into one comparison view"
+          disabled={!canCompare}
+          title={
+            target === 'spans'
+              ? 'assemble the matching span across every node into one comparison view'
+              : 'switch to span results before comparing'
+          }
           onClick={onCompare}
         >
           Compare
