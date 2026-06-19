@@ -58,8 +58,8 @@ function hexToB64(hex: string): string {
   return btoa(String.fromCharCode(...bytes))
 }
 
-// A three-node consensus round sharing one trace id. Raw order is
-// intentionally NOT natural order (node-10 first) to test instance sorting.
+// A multi-service trace. Raw order is intentionally NOT natural order
+// (node-10 first) to test instance sorting.
 function multiInstanceRaw(): unknown {
   const node = (n: string, rootId: string, childId: string, startOff: number, dur: number) =>
     group(n, [

@@ -142,7 +142,9 @@ virtualization). Canvas precomputes layout — no per-frame allocations; keep
   assembles one synthetic multi-instance trace (`Instance` identity:
   `service.name` + optional `#service.instance.id`; lanes share a time axis
   anchored at the earliest match so start skew is visible, ids instance-prefixed).
-  `/compare/aggregate` is the cross-node code-path view.
+  `/compare/aggregate` is the cross-node code-path view. Do not make workloads
+  share deterministic trace ids to force grouping; trace ids remain trace
+  identity, while cross-node operation identity lives in span attributes.
 - Tempo search returns an unordered subset — the windowed newest-first search
   in `TempoClient` is what makes "latest N" deterministic. Don't bypass it.
 

@@ -10,7 +10,9 @@ a typed REST API for distributed systems where many nodes run the SAME system
 and EACH node emits its OWN trace. To view or compare one logical operation
 across nodes, correlate the matching span across their separate traces by span
 name + an attribute that pins the operation (e.g. a consensus view) with
-`/compare` and `/compare/aggregate`.
+`/compare` and `/compare/aggregate`. Do not force multiple nodes to reuse one
+deterministic trace ID; trace IDs are trace identity, not the cross-node
+comparison key.
 
 `$BASE` below is the deployment origin, e.g. `http://localhost:8080`.
 
@@ -151,6 +153,8 @@ node, link its trace: `$BASE/#/trace/<traceId>`.
   already did the cross-node join.
 - Don't expect multiple nodes in one trace — each node emits its own; cross-node
   analysis goes through `/compare`.
+- Don't use a deterministic shared trace ID as the operation identifier; use an
+  exact span name plus a span attribute such as `height`.
 - Don't mix the time units; don't pass milliseconds to `from`/`to`.
 - Don't hardcode workload span names (`round`, `commit`, …) in reusable
   tooling — discover names via search results or `/compare/aggregate` paths.

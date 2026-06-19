@@ -23,6 +23,9 @@ a time. tracer is built around the cross-node view:
   and lays each node out on its own lane on a shared time axis — so
   you see who started late, who stalled, and how the work overlapped across the
   cluster.
+- **Trace IDs stay real.** Do not force every node to reuse one deterministic
+  trace ID for a logical operation. Let OpenTelemetry create normal trace IDs;
+  use span names and attributes for cross-node correlation.
 - **Merged aggregate flame.** Collapse all instances onto one flame, each span
   split into per-instance sub-bars, to compare the same code path across nodes.
 - **Cross-node skew, surfaced.** A **stats** tab (per span: p50/p95/max, error
@@ -81,8 +84,8 @@ cd docker && just demo
 open http://localhost:8080
 ```
 
-`just demo` builds the images and starts the stack with a fresh `RUN_ID`; the
-nodes emit one consensus round per second. Stop it with `just demo-down`. See
+`just demo` builds the images and starts the stack; the nodes emit one
+consensus round per second. Stop it with `just demo-down`. See
 [`docker/demo/README.md`](docker/demo/README.md).
 
 ## The REST API (for agents)
