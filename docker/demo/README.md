@@ -14,9 +14,9 @@ just demo          # build the web + loadgen images and start the stack
 ```
 
 Then open http://localhost:8080. The nodes emit one consensus round per second;
-within a few seconds the search view returns traces. Each `just demo` exports a
-fresh `RUN_ID` (unix timestamp) so every run produces distinct, deterministic
-trace ids and the nodes' rounds line up.
+within a few seconds the search view returns traces. Each node emits its own
+trace; compare rounds across nodes with `name=round` and the shared `height`
+span attribute.
 
 ```sh
 just demo-logs            # tail all services

@@ -4,23 +4,15 @@
 //! interval it runs a round (prepare → exchange → commit) instrumented with
 //! the `tracing` crate and ships the spans/events to Tempo over OTLP via
 //! `tracing-opentelemetry`.
-//!
-//! The one deliberate trick: every node derives the same trace id for a
-//! given height, so the spans of all nodes land in a single trace and the
-//! viewer can overlay them per instance.
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use opentelemetry::trace::{
-    SpanContext, SpanId, TraceContextExt, TraceFlags, TraceId, TraceState, TracerProvider as _,
-};
-use opentelemetry::{Context, KeyValue};
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{trace::SdkTracerProvider, Resource};
 use rand::{rngs::StdRng, Rng, SeedableRng};
-use sha2::{Digest, Sha256};
 use tracing::{debug_span, info_span, trace_span, warn_span, Instrument};
-use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::{Layer as _, SubscriberExt};
 use tracing_subscriber::util::SubscriberInitExt;
@@ -30,7 +22,6 @@ struct Config {
     num_nodes: u64,
     otlp_endpoint: String,
     round_interval_ms: u64,
-    run_id: String,
     fail_rate: f64,
 }
 
@@ -41,7 +32,6 @@ impl Config {
             num_nodes: env_or("NUM_NODES", 4).max(1),
             otlp_endpoint: env_or("OTLP_ENDPOINT", "http://localhost:4317".to_string()),
             round_interval_ms: env_or("ROUND_INTERVAL_MS", 1000).max(100),
-            run_id: env_or("RUN_ID", "local".to_string()),
             fail_rate: env_or("FAIL_RATE", 0.02_f64).clamp(0.0, 1.0),
         }
     }
@@ -52,21 +42,6 @@ fn env_or<T: std::str::FromStr>(key: &str, default: T) -> T {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(default)
-}
-
-/// Every node derives the same trace id for a height, so all nodes' spans
-/// join one trace. The parent span id is left invalid: each node's `round`
-/// span is exported as a root of that shared trace.
-fn shared_trace_parent(run_id: &str, height: u64) -> Context {
-    let digest = Sha256::digest(format!("{run_id}:{height}"));
-    let trace_id = TraceId::from_bytes(digest[..16].try_into().expect("digest >= 16 bytes"));
-    Context::new().with_remote_span_context(SpanContext::new(
-        trace_id,
-        SpanId::INVALID,
-        TraceFlags::SAMPLED,
-        true,
-        TraceState::default(),
-    ))
 }
 
 async fn jitter(rng: &mut StdRng, lo_ms: u64, hi_ms: u64) {
@@ -103,8 +78,6 @@ async fn round(cfg: &Config, height: u64) {
         node.id = cfg.node_id as i64,
         level = "info"
     );
-    span.set_parent(shared_trace_parent(&cfg.run_id, height))
-        .expect("otel layer is installed on the subscriber");
 
     async {
         // prepare: load local state and validate the mempool concurrently;
@@ -332,12 +305,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     println!(
-        "consensus-sim node={}/{} endpoint={} interval={}ms run={} fail_rate={}",
+        "consensus-sim node={}/{} endpoint={} interval={}ms fail_rate={}",
         cfg.node_id,
         cfg.num_nodes,
         cfg.otlp_endpoint,
         cfg.round_interval_ms,
-        cfg.run_id,
         cfg.fail_rate
     );
 

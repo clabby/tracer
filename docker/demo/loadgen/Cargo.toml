@@ -15,7 +15,6 @@ tracing-subscriber = "0.3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal"] }
 futures = "0.3"
 rand = "0.9"
-sha2 = "0.10"
 
 # Keep generated binaries small and fast; this is a long-running emitter.
 [profile.release]

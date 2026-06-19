@@ -2,8 +2,7 @@
 # image pointed at the bundled Tempo.
 #
 # Build the images first via `just demo` (which bakes the prod web image and
-# the loadgen image, then runs this compose with a fresh RUN_ID so every node
-# shares it and the simulated rounds line up across nodes).
+# the loadgen image, then runs this compose).
 #
 # The web service is the SAME production image shipped to real deployments; the
 # only demo-specific wiring is TEMPO_URL=tempo:3200, which the bundled API
@@ -40,7 +39,6 @@ services:
       NUM_NODES: "4"
       OTLP_ENDPOINT: http://tempo:4317
       ROUND_INTERVAL_MS: "1000"
-      RUN_ID: ${RUN_ID:-local}
     depends_on:
       - tempo
 
@@ -52,7 +50,6 @@ services:
       NUM_NODES: "4"
       OTLP_ENDPOINT: http://tempo:4317
       ROUND_INTERVAL_MS: "1000"
-      RUN_ID: ${RUN_ID:-local}
     depends_on:
       - tempo
 
@@ -64,7 +61,6 @@ services:
       NUM_NODES: "4"
       OTLP_ENDPOINT: http://tempo:4317
       ROUND_INTERVAL_MS: "1000"
-      RUN_ID: ${RUN_ID:-local}
     depends_on:
       - tempo
 
@@ -76,7 +72,6 @@ services:
       NUM_NODES: "4"
       OTLP_ENDPOINT: http://tempo:4317
       ROUND_INTERVAL_MS: "1000"
-      RUN_ID: ${RUN_ID:-local}
     depends_on:
       - tempo
 
