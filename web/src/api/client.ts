@@ -64,7 +64,6 @@ export function buildCompareQuery(filter: FilterState, range: TimeRange): string
   if (f.maxDuration.trim() !== '') p.set('maxDuration', f.maxDuration)
   for (const a of f.attrs) p.append('attr', `${a.scope}.${a.key}${a.op}${a.value}`)
   if (f.rawQuery.trim() !== '') p.set('q', f.rawQuery)
-  p.set('limit', String(f.limit))
   p.set('from', String(Math.floor(range.from)))
   p.set('to', String(Math.ceil(range.to)))
   return p.toString()

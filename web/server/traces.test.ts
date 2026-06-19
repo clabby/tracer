@@ -231,10 +231,14 @@ const NODE1_OTLP = nodeOtlp('node-1', 'aa01', 'aaaa0000aaaa0001', 'cccccccccccc0
 const NODE2_OTLP = nodeOtlp('node-2', 'bb02', 'aaaa0000aaaa0002', 'cccccccccccc0002', 'dddd0000dddd0002', 3_000_000, 600_000)
 
 describe('handleCompare', () => {
+  let lastSearchUrl: URL | null = null
+
   beforeEach(() => {
+    lastSearchUrl = null
     globalThis.fetch = (async (input: string | URL | Request) => {
       const url = new URL(String(input))
       if (url.pathname === '/api/search') {
+        lastSearchUrl = url
         return Response.json(COMPARE_SEARCH)
       }
       if (url.pathname === '/api/v2/traces/aa01') return Response.json(NODE1_OTLP)
@@ -284,6 +288,15 @@ describe('handleCompare', () => {
     // The wire trace hydrates back into a usable model.
     const model = hydrateTrace(body)
     expect(model.instances).toHaveLength(2)
+  })
+
+  test('compare searches broadly even when the UI result limit is small', async () => {
+    const { body } = await compare(
+      'name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&from=1749571100&to=1749571300&limit=1',
+    )
+    expect(body.instances.map((i) => i.id)).toEqual(['node-1', 'node-2'])
+    expect(lastSearchUrl?.searchParams.get('limit')).toBe('1000')
+    expect(lastSearchUrl?.searchParams.get('spss')).toBe('1000')
   })
 
   test('compare/aggregate gives per-node code-path stats over the assembly', async () => {

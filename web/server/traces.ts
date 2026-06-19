@@ -11,7 +11,7 @@ import type { FilterState, SpanMatch, TimeRange, TraceModel } from '../src/lib/m
 import { assembleComparison, buildAggregateTree } from '../src/lib/trace'
 import { flattenAggregate, serializeTrace } from '../src/lib/wire'
 import type { AggregateResponse, TraceOverview } from '../src/lib/apischema'
-import { parseSearchQuery } from './params'
+import { MAX_LIMIT, parseSearchQuery } from './params'
 import { badRequest, type InvalidParam } from './problem'
 import { json, type Deps } from './router'
 
@@ -130,7 +130,7 @@ async function assembleFromQuery(
   range: TimeRange,
   deps: Deps,
 ): Promise<TraceModel> {
-  const targets = (await deps.tempo.searchTraces(filter, range)).filter(
+  const targets = (await deps.tempo.searchTraces({ ...filter, limit: MAX_LIMIT }, range)).filter(
     (s) => s.matchedSpanIds.length > 0,
   )
   const loaded = await Promise.all(

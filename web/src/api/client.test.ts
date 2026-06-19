@@ -60,7 +60,7 @@ describe('buildCompareQuery', () => {
     expect(p.get('name')).toBe('simplex.voter.view')
     expect(p.get('nameRegex')).toBe('false')
     expect(p.get('attr')).toBe('span.view=1612')
-    expect(p.get('limit')).toBe('30')
+    expect(p.has('limit')).toBe(false)
     // range is floored/ceiled to whole unix seconds
     expect(p.get('from')).toBe('1749571100')
     expect(p.get('to')).toBe('1749571301')

@@ -171,7 +171,7 @@ export class TempoClient implements ITempoClient {
       start: String(w.from),
       end: String(w.to),
       limit: String(limit),
-      spss: '20',
+      spss: String(limit),
     })
     const data = await this.getJson(`/api/search?${params.toString()}`)
     const traces =
