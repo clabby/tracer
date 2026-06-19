@@ -1,15 +1,23 @@
 import { describe, expect, test } from 'bun:test'
 import { DEFAULT_FILTER, canCompareFilter, type FilterState } from './model'
 
-const named: FilterState = { ...DEFAULT_FILTER, name: 'round' }
+const comparable: FilterState = {
+  ...DEFAULT_FILTER,
+  name: 'round',
+  nameIsRegex: false,
+  attrs: [{ id: 'a', scope: 'span', key: 'height', op: '=', value: '42' }],
+}
 
 describe('canCompareFilter', () => {
   test('only span searches can be compared', () => {
-    expect(canCompareFilter('spans', named)).toBe(true)
-    expect(canCompareFilter('events', named)).toBe(false)
+    expect(canCompareFilter('spans', comparable)).toBe(true)
+    expect(canCompareFilter('events', comparable)).toBe(false)
   })
 
-  test('needs a span name or raw query', () => {
+  test('needs an exact span name plus a pinning span attribute', () => {
     expect(canCompareFilter('spans', DEFAULT_FILTER)).toBe(false)
+    expect(canCompareFilter('spans', { ...comparable, nameIsRegex: true })).toBe(false)
+    expect(canCompareFilter('spans', { ...comparable, rawQuery: '{ name = "round" }' })).toBe(false)
+    expect(canCompareFilter('spans', { ...comparable, attrs: [] })).toBe(false)
   })
 })

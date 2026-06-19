@@ -213,9 +213,21 @@ export const DEFAULT_FILTER: FilterState = {
   limit: 50,
 }
 
+export function hasComparePinningAttr(filter: FilterState): boolean {
+  return filter.attrs.some((a) => {
+    if (a.scope !== 'span') return false
+    if (a.op !== '=') return false
+    if (a.key.trim() === '') return false
+    return a.value.trim() !== ''
+  })
+}
+
 export function canCompareFilter(target: SearchTarget, filter: FilterState): boolean {
   if (target !== 'spans') return false
-  return filter.name.trim() !== '' || filter.rawQuery.trim() !== ''
+  if (filter.rawQuery.trim() !== '') return false
+  if (filter.name.trim() === '') return false
+  if (filter.nameIsRegex) return false
+  return hasComparePinningAttr(filter)
 }
 
 /** Time range in unix seconds. */

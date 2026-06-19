@@ -346,7 +346,9 @@ export default function SearchPanel({
           disabled={!canCompare}
           title={
             target === 'spans'
-              ? 'assemble the matching span across every node into one comparison view'
+              ? canCompare
+                ? 'assemble the matching span across every node into one comparison view'
+                : 'compare requires exact span name and one exact span attribute'
               : 'switch to span results before comparing'
           }
           onClick={onCompare}

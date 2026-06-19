@@ -322,7 +322,9 @@ describe('handleCompare', () => {
 
   test('no spans matched: empty model carries a warning, not an error', async () => {
     globalThis.fetch = (async () => Response.json({ traces: [] })) as unknown as typeof fetch
-    const { status, body } = await compare('name=nope&nameRegex=false&from=1749571100&to=1749571300')
+    const { status, body } = await compare(
+      'name=nope&nameRegex=false&attr=span.view%3D1612&from=1749571100&to=1749571300',
+    )
     expect(status).toBe(200)
     expect(body.instances).toEqual([])
     expect(body.warnings.some((w) => w.includes('no spans matched'))).toBe(true)
@@ -338,6 +340,26 @@ describe('handleCompare', () => {
       expect((err as Response).status).toBe(400)
       const p = (await (err as Response).json()) as ApiProblem
       expect(p.invalidParams?.[0].name).toBe('name')
+    }
+  })
+
+  test('an exact name and pinning span attribute are required', async () => {
+    const cases = [
+      ['name=round&attr=span.height%3D42&from=1749571100&to=1749571300', 'nameRegex'],
+      ['name=round&nameRegex=false&from=1749571100&to=1749571300', 'attr'],
+      ['q=%7Bname%3D%22round%22%7D&from=1749571100&to=1749571300', 'q'],
+    ]
+    for (const [query, field] of cases) {
+      const url = new URL(`http://x/api/v1/compare?${query}`)
+      try {
+        await handleCompare(new Request(url), url, {}, deps())
+        throw new Error('expected a problem Response')
+      } catch (err) {
+        expect(err).toBeInstanceOf(Response)
+        expect((err as Response).status).toBe(400)
+        const p = (await (err as Response).json()) as ApiProblem
+        expect(p.invalidParams?.some((ip) => ip.name === field)).toBe(true)
+      }
     }
   })
 })

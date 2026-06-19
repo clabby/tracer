@@ -7,7 +7,13 @@
  * single Tempo fetch + parse inside the 15s window the Cache-Control advertises.
  */
 
-import type { FilterState, SpanMatch, TimeRange, TraceModel } from '../src/lib/model'
+import {
+  hasComparePinningAttr,
+  type FilterState,
+  type SpanMatch,
+  type TimeRange,
+  type TraceModel,
+} from '../src/lib/model'
 import { assembleComparison, buildAggregateTree } from '../src/lib/trace'
 import { flattenAggregate, serializeTrace } from '../src/lib/wire'
 import type { AggregateResponse, TraceOverview } from '../src/lib/apischema'
@@ -106,15 +112,36 @@ const COMPARE_TRACE_ID = 'compare'
 
 /** A comparison needs one span kind to correlate on; reject an empty target. */
 function requireCorrelator(filter: FilterState): void {
-  if (filter.name.trim() === '' && filter.rawQuery.trim() === '') {
-    throw badRequest('A comparison needs a span to correlate on.', [
-      {
-        name: 'name',
-        reason:
-          'give an exact span name (add an `attr` to pin the operation, e.g. attr=span.view=1612) or a raw `q`',
-        example: 'simplex.voter.view',
-      },
-    ])
+  const errors: InvalidParam[] = []
+  if (filter.rawQuery.trim() !== '') {
+    errors.push({
+      name: 'q',
+      reason: 'raw TraceQL cannot prove one operation; use exact name plus an exact span attr',
+      example: 'name=round&nameRegex=false&attr=span.height=42',
+    })
+  }
+  if (filter.name.trim() === '') {
+    errors.push({
+      name: 'name',
+      reason: 'required; compare needs the exact span name to correlate',
+      example: 'round',
+    })
+  } else if (filter.nameIsRegex) {
+    errors.push({
+      name: 'nameRegex',
+      reason: 'must be false; regex names can match multiple operations',
+      example: 'false',
+    })
+  }
+  if (!hasComparePinningAttr(filter)) {
+    errors.push({
+      name: 'attr',
+      reason: 'add one exact span attribute that pins the operation',
+      example: 'span.height=42',
+    })
+  }
+  if (errors.length > 0) {
+    throw badRequest('A comparison needs an exact span name plus a pinning span attribute.', errors)
   }
 }
 
