@@ -66,7 +66,10 @@ function Row({
 }) {
   return (
     <tr onClick={onClick}>
-      <td className="tl-id mono-num" title={trace.traceId}>
+      <td
+        className="tl-id mono-num"
+        title={traceLabel === undefined ? trace.traceId : 'open cross-node comparison'}
+      >
         {traceLabel ?? shortId(trace.traceId)}
       </td>
       <td className="tl-name">
@@ -121,19 +124,25 @@ function EventRow({
       <td className="tl-name">{event.spanName}</td>
       <td>
         <span className="tl-service-cell">
-          <span
-            className="swatch"
-            style={{
-              background: instanceColorVar(colorIndexForService(event.serviceName)),
-            }}
-          />
+          {/* A compare row spans several services; one swatch would misrepresent it. */}
+          {traceLabel === undefined && (
+            <span
+              className="swatch"
+              style={{
+                background: instanceColorVar(colorIndexForService(event.serviceName)),
+              }}
+            />
+          )}
           <span className="inst-name" title={event.serviceName}>
             {event.serviceName}
           </span>
         </span>
       </td>
       <td className="tl-num mono-num">{formatNs(event.spanDurationNs)}</td>
-      <td className="tl-id mono-num" title={event.traceId}>
+      <td
+        className="tl-id mono-num"
+        title={traceLabel === undefined ? event.traceId : 'open cross-node comparison'}
+      >
         {traceLabel ?? shortId(event.traceId)}
       </td>
     </tr>

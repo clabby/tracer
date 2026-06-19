@@ -24,6 +24,8 @@ import { json, type Deps } from './router'
 
 const CACHE_TTL_MS = 15_000
 const CACHE_MAX = 16
+/** Max per-node trace fetches a comparison runs at once (keeps Tempo healthy). */
+const CONCURRENT_TRACE_FETCHES = 16
 
 const cache = new Map<string, { model: TraceModel; at: number }>()
 
@@ -163,104 +165,129 @@ function requireCorrelator(filter: FilterState, target: SearchTarget): void {
   }
 }
 
+/** One node's contribution: its trace id and the matched span id(s) within it. */
+interface CompareTarget {
+  traceId: string
+  spanIds: string[]
+}
+
 /**
- * Locate the span matching the search filter (a span name plus an attribute) in
- * each node's own trace and assemble every match's subtree into one synthetic
- * multi-instance trace: lanes share a time axis anchored at the earliest match,
- * span ids instance-prefixed. Per-trace fetch failures become warnings rather
- * than failing the request.
+ * Bounded-concurrency fetch+parse of each node's own trace. A large comparison
+ * can match hundreds of traces; firing every fetch at once would stampede Tempo
+ * and time fetches out (dropping nodes), so at most `CONCURRENT_TRACE_FETCHES`
+ * run in flight. Per-trace failures become warnings, never a failed request.
  */
-async function assembleFromQuery(
-  filter: FilterState,
-  range: TimeRange,
+async function loadTargets(
+  targets: CompareTarget[],
+  deps: Deps,
+): Promise<Array<{ t: CompareTarget; model: TraceModel } | { t: CompareTarget; err: string }>> {
+  const out = new Array<{ t: CompareTarget; model: TraceModel } | { t: CompareTarget; err: string }>(
+    targets.length,
+  )
+  let next = 0
+  const worker = async (): Promise<void> => {
+    for (let i = next++; i < targets.length; i = next++) {
+      const t = targets[i]
+      out[i] = await loadTrace(t.traceId, deps)
+        .then(({ model }) => ({ t, model }))
+        .catch((err) => ({ t, err: err instanceof Error ? err.message : String(err) }))
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENT_TRACE_FETCHES, targets.length) }, worker),
+  )
+  return out
+}
+
+/**
+ * Locate the matched span in each node's own trace and assemble every match's
+ * subtree into one synthetic multi-instance trace: lanes share a time axis
+ * anchored at the earliest match, span ids instance-prefixed. `noun`/`name`
+ * shape the "nothing matched" warning.
+ */
+async function assembleTargets(
+  targets: CompareTarget[],
+  noun: string,
+  name: string,
   deps: Deps,
 ): Promise<TraceModel> {
-  const targets = (await deps.tempo.searchTraces({ ...filter, limit: MAX_LIMIT }, range)).filter(
-    (s) => s.matchedSpanIds.length > 0,
-  )
-  const loaded = await Promise.all(
-    targets.map((s) =>
-      loadTrace(s.traceId, deps)
-        .then(({ model }) => ({ s, model }))
-        .catch((err) => ({ s, err: err instanceof Error ? err.message : String(err) })),
-    ),
-  )
-
+  const loaded = await loadTargets(targets, deps)
   const matches: SpanMatch[] = []
   const warnings: string[] = []
   const usedIds = new Set<string>()
   for (const entry of loaded) {
     if ('err' in entry) {
-      warnings.push(`trace ${entry.s.traceId}: ${entry.err}`)
+      warnings.push(`trace ${entry.t.traceId}: ${entry.err}`)
       continue
     }
-    const byInstance = new Map(entry.model.instances.map((i) => [i.id, i]))
-    const roots = [...new Set(entry.s.matchedSpanIds)].flatMap((spanId) => {
+    const roots = [...new Set(entry.t.spanIds)].flatMap((spanId) => {
       const root = entry.model.spans.get(spanId)
       return root === undefined ? [] : [root]
     })
     if (roots.length > 1) {
       warnings.push(
-        `trace ${entry.s.traceId}: compare expects one matching span per node trace; found ${roots.length}. Do not force multiple nodes into one trace id.`,
+        `trace ${entry.t.traceId}: compare expects one matching span per node trace; found ${roots.length}. Do not force multiple nodes into one trace id.`,
       )
       continue
     }
     const root = roots[0]
     if (root === undefined) continue
-    const instance = byInstance.get(root.instanceId)
+    const instance = entry.model.instances.find((i) => i.id === root.instanceId)
     if (instance === undefined) continue
-    let id = instance.id
-    if (usedIds.has(id)) id = `${instance.id}#${entry.s.traceId.slice(0, 6)}`
-    if (usedIds.has(id)) id = `${instance.id}#${root.spanId.slice(0, 8)}`
+    // Two node traces reporting the same instance id (identical service.name)
+    // would collide on assembly; disambiguate the second one by trace id.
+    const id = usedIds.has(instance.id) ? `${instance.id}#${entry.t.traceId.slice(0, 6)}` : instance.id
     usedIds.add(id)
     matches.push({ instance: { ...instance, id }, root, startUnixMs: entry.model.startUnixMs })
   }
 
   const model = assembleComparison(matches, COMPARE_TRACE_ID)
   model.warnings.push(...warnings)
-  if (matches.length === 0) {
-    const what = filter.name.trim() !== '' ? `name "${filter.name.trim()}"` : 'the query'
-    model.warnings.push(`no spans matched ${what} with these filters in this range`)
+  if (model.instances.length === 0) {
+    model.warnings.push(`no ${noun} matched name "${name}" with these filters in this range`)
   }
   return model
 }
 
-async function assembleFromEvents(
-  filter: FilterState,
-  range: TimeRange,
-  deps: Deps,
-): Promise<TraceModel> {
-  const targets = await deps.tempo.searchEvents({ ...filter, limit: MAX_LIMIT }, range)
-  const loaded = await Promise.all(
-    targets.map((event) =>
-      loadTrace(event.traceId, deps)
-        .then(({ model }) => ({ event, model }))
-        .catch((err) => ({ event, err: err instanceof Error ? err.message : String(err) })),
-    ),
-  )
-
-  const matches: SpanMatch[] = []
-  const warnings: string[] = []
-  const usedIds = new Set<string>()
-  for (const entry of loaded) {
-    if ('err' in entry) {
-      warnings.push(`trace ${entry.event.traceId}: ${entry.err}`)
-      continue
-    }
-    const root = entry.model.spans.get(entry.event.spanId)
-    if (root === undefined) continue
-    const instance = entry.model.instances.find((i) => i.id === root.instanceId)
-    if (instance === undefined) continue
-    let id = instance.id
-    if (usedIds.has(id)) id = `${instance.id}#${entry.event.traceId.slice(0, 6)}`
-    if (usedIds.has(id)) id = `${instance.id}#${root.spanId.slice(0, 8)}`
-    usedIds.add(id)
-    matches.push({ instance: { ...instance, id }, root, startUnixMs: entry.model.startUnixMs })
+/**
+ * The search caps at MAX_LIMIT rows; hitting it means there are more matches in
+ * the range than one comparison can hold. Surface that as a warning so the
+ * comparison never *silently* drops nodes — the caller narrows the range to see
+ * the rest.
+ */
+function warnIfTruncated(model: TraceModel, matched: number, noun: string): void {
+  if (matched >= MAX_LIMIT) {
+    model.warnings.push(
+      `more than ${MAX_LIMIT} ${noun} matched; comparison shows the newest ${MAX_LIMIT} — narrow the time range to include the rest`,
+    )
   }
+}
 
-  const model = assembleComparison(matches, COMPARE_TRACE_ID)
-  model.warnings.push(...warnings)
-  if (matches.length === 0) model.warnings.push(`no events matched name "${filter.name.trim()}" with these filters in this range`)
+/** Compare a span across nodes: locate it per node trace, then assemble. */
+async function assembleFromQuery(filter: FilterState, range: TimeRange, deps: Deps): Promise<TraceModel> {
+  const rows = await deps.tempo.searchTraces({ ...filter, limit: MAX_LIMIT }, range)
+  const model = await assembleTargets(
+    rows
+      .filter((s) => s.matchedSpanIds.length > 0)
+      .map((s) => ({ traceId: s.traceId, spanIds: s.matchedSpanIds })),
+    'spans',
+    filter.name.trim(),
+    deps,
+  )
+  warnIfTruncated(model, rows.length, 'traces')
+  return model
+}
+
+/** Compare an event across nodes by assembling the spans that own each match. */
+async function assembleFromEvents(filter: FilterState, range: TimeRange, deps: Deps): Promise<TraceModel> {
+  const events = await deps.tempo.searchEvents({ ...filter, limit: MAX_LIMIT }, range)
+  const model = await assembleTargets(
+    events.map((e) => ({ traceId: e.traceId, spanIds: [e.spanId] })),
+    'events',
+    filter.name.trim(),
+    deps,
+  )
+  warnIfTruncated(model, events.length, 'events')
   return model
 }
 

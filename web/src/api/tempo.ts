@@ -257,6 +257,7 @@ export class TempoClient implements ITempoClient {
 
 // ----------------------------------------------------- response mapping --
 
+/** TraceQL that scopes tag-name discovery to one span (or event) name. */
 function tagNameTraceQL(context?: TagNameContext): string | null {
   if (context === undefined || context.name.trim() === '') return null
   return buildTraceQL(

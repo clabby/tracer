@@ -104,77 +104,87 @@ function eventRow(id: string, events: readonly EventSummary[], name: string): Ev
   }
 }
 
-export function groupTraceSummaries(traces: readonly TraceSummary[], filter: FilterState): GroupedRows<TraceSummary> {
-  const attrs = groupAttrs(filter).filter((attr) => attr.scope !== 'event')
-  if (attrs.length === 0 || !attrs.some((attr) => attr.scope === 'span')) {
-    return { rows: [...traces], compares: [] }
-  }
-
-  const groups = new Map<string, { traces: TraceSummary[]; name: string; values: AttrPrimitive[] }>()
-  const rest: TraceSummary[] = []
-  for (const trace of traces) {
-    if (trace.matchedSpans.length !== 1) {
-      rest.push(trace)
+/**
+ * Group rows that are equivalent under the current filter — same name plus the
+ * same value for every grouping attribute — collapsing each group of ≥2 into
+ * one synthetic "compare" row (the others pass through untouched). A row whose
+ * grouping attributes can't all be read (`getAttrs` null, or a missing value)
+ * is left alone. Each collapsed group also yields a `CompareRow` carrying the
+ * exact filter that reproduces it via `/compare`.
+ */
+function groupRows<T>(
+  items: readonly T[],
+  filter: FilterState,
+  attrs: AttrFilter[],
+  target: SearchTarget,
+  getAttrs: (item: T) => Attributes | null,
+  getName: (item: T) => string,
+  startMs: (item: T) => number,
+  makeRow: (id: string, group: T[], name: string) => T,
+): GroupedRows<T> {
+  const groups = new Map<string, { items: T[]; name: string; values: AttrPrimitive[] }>()
+  const rest: T[] = []
+  for (const item of items) {
+    const itemAttrs = getAttrs(item)
+    const values = itemAttrs === null ? null : attrs.map((attr) => valueFor(itemAttrs, attr))
+    if (values === null || values.some((value) => value === null)) {
+      rest.push(item)
       continue
     }
-    const span = trace.matchedSpans[0]
-    const values = attrs.map((attr) => valueFor(span.attributes, attr))
-    if (values.some((value) => value === null)) {
-      rest.push(trace)
-      continue
-    }
-    const key = groupKey(span.name, attrs, values as AttrPrimitive[])
+    const vals = values as AttrPrimitive[]
+    const name = getName(item)
+    const key = groupKey(name, attrs, vals)
     const group = groups.get(key)
-    if (group === undefined) groups.set(key, { traces: [trace], name: span.name, values: values as AttrPrimitive[] })
-    else group.traces.push(trace)
+    if (group === undefined) groups.set(key, { items: [item], name, values: vals })
+    else group.items.push(item)
   }
 
   const rows = [...rest]
-  const compares: CompareRow<TraceSummary>[] = []
+  const compares: CompareRow<T>[] = []
   for (const [key, group] of groups) {
-    if (group.traces.length < 2) {
-      rows.push(...group.traces)
+    if (group.items.length < 2) {
+      rows.push(...group.items)
       continue
     }
-    const row = traceRow(`compare:${key}`, group.traces, group.name)
+    const row = makeRow(`compare:${key}`, group.items, group.name)
     rows.push(row)
-    compares.push({ row, filter: compareFilter(filter, group.name, attrs, group.values), target: 'spans' })
+    compares.push({ row, filter: compareFilter(filter, group.name, attrs, group.values), target })
   }
-  rows.sort((a, b) => b.startUnixMs - a.startUnixMs)
+  rows.sort((a, b) => startMs(b) - startMs(a))
   return { rows, compares }
+}
+
+export function groupTraceSummaries(traces: readonly TraceSummary[], filter: FilterState): GroupedRows<TraceSummary> {
+  // Span rows correlate on span/resource attributes; a span attribute is what
+  // pins the operation, so without one there is nothing to compare on.
+  const attrs = groupAttrs(filter).filter((attr) => attr.scope !== 'event')
+  if (!attrs.some((attr) => attr.scope === 'span')) return { rows: [...traces], compares: [] }
+  return groupRows(
+    traces,
+    filter,
+    attrs,
+    'spans',
+    // Only single-match rows correlate cleanly to one operation per node.
+    (trace) => (trace.matchedSpans.length === 1 ? trace.matchedSpans[0].attributes : null),
+    (trace) => trace.matchedSpans[0]?.name ?? trace.rootTraceName,
+    (trace) => trace.startUnixMs,
+    traceRow,
+  )
 }
 
 export function groupEventSummaries(events: readonly EventSummary[], filter: FilterState): GroupedRows<EventSummary> {
   const attrs = groupAttrs(filter)
-  if (attrs.length === 0 || !attrs.some((attr) => attr.scope === 'span' || attr.scope === 'event')) {
+  if (!attrs.some((attr) => attr.scope === 'span' || attr.scope === 'event')) {
     return { rows: [...events], compares: [] }
   }
-
-  const groups = new Map<string, { events: EventSummary[]; name: string; values: AttrPrimitive[] }>()
-  const rest: EventSummary[] = []
-  for (const event of events) {
-    const values = attrs.map((attr) => valueFor(event.attributes, attr))
-    if (values.some((value) => value === null)) {
-      rest.push(event)
-      continue
-    }
-    const key = groupKey(event.eventName, attrs, values as AttrPrimitive[])
-    const group = groups.get(key)
-    if (group === undefined) groups.set(key, { events: [event], name: event.eventName, values: values as AttrPrimitive[] })
-    else group.events.push(event)
-  }
-
-  const rows = [...rest]
-  const compares: CompareRow<EventSummary>[] = []
-  for (const [key, group] of groups) {
-    if (group.events.length < 2) {
-      rows.push(...group.events)
-      continue
-    }
-    const row = eventRow(`compare:${key}`, group.events, group.name)
-    rows.push(row)
-    compares.push({ row, filter: compareFilter(filter, group.name, attrs, group.values), target: 'events' })
-  }
-  rows.sort((a, b) => b.spanStartUnixMs - a.spanStartUnixMs)
-  return { rows, compares }
+  return groupRows(
+    events,
+    filter,
+    attrs,
+    'events',
+    (event) => event.attributes,
+    (event) => event.eventName,
+    (event) => event.spanStartUnixMs,
+    eventRow,
+  )
 }

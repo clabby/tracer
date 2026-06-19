@@ -7,7 +7,7 @@
 import { useMemo, useState } from 'react'
 import type { ChangeEvent, KeyboardEvent } from 'react'
 import type { AttrFilter, AttrOp, FilterState, Level, SearchPanelProps, TagNameContext } from '../lib/model'
-import { LEVELS, canCompareFilter, colorIndexForService, instanceColorVar } from '../lib/model'
+import { LEVELS, colorIndexForService, instanceColorVar } from '../lib/model'
 import { clamp, isValidDurationInput, uid } from '../lib/format'
 import { buildTraceQL } from '../lib/traceql'
 import Combobox from './Combobox'
@@ -23,7 +23,6 @@ export default function SearchPanel({
   range,
   onRangeChange,
   onSearch,
-  onCompare,
   searching,
   client,
 }: SearchPanelProps) {
@@ -32,7 +31,8 @@ export default function SearchPanel({
 
   const compiled = useMemo(() => buildTraceQL(filter, target), [filter, target])
   const rawActive = filter.rawQuery.trim() !== ''
-  const canCompare = canCompareFilter(target, filter)
+  // Scope attribute-key suggestions to the entered span/event name, so the
+  // dropdown offers only keys seen on those spans — not every attribute.
   const tagNameContext = useMemo<TagNameContext | undefined>(() => {
     if (filter.name.trim() === '') return undefined
     return { target, name: filter.name, nameIsRegex: filter.nameIsRegex }
@@ -343,21 +343,6 @@ export default function SearchPanel({
         >
           {searching && <span className="spinner" aria-hidden="true" />}
           {searching ? 'searching…' : 'Search'}
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost sp-compare"
-          disabled={!canCompare}
-          title={
-            target === 'spans'
-              ? canCompare
-                ? 'assemble the matching span across every node into one comparison view'
-                : 'compare requires exact span name and one exact span attribute'
-              : 'switch to span results before comparing'
-          }
-          onClick={onCompare}
-        >
-          Compare
         </button>
       </div>
     </div>

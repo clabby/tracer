@@ -35,6 +35,7 @@ function parseTarget(raw: string | null): SearchTarget {
   ])
 }
 
+/** Optional name scope (`?name=…&nameRegex=…&target=…`) for tag-name discovery. */
 function parseNameContext(url: URL): TagNameContext | undefined {
   const name = url.searchParams.get('name') ?? ''
   if (name.trim() === '') return undefined

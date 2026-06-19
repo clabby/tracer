@@ -122,7 +122,7 @@ export const ROUTES: RouteDef[] = [
     operationId: 'searchTraces',
     summary:
       'Search traces. Returns the latest N matching traces in the range, deduplicated and sorted newest-first (deterministic — to see further back, narrow or shift the range). The response echoes the executed TraceQL.',
-    params: COMPARE_QUERY_PARAMS,
+    params: SEARCH_QUERY_PARAMS,
     responseSchema: 'searchTracesResponseSchema',
     example:
       "curl -s 'http://localhost:8080/api/v1/search/traces?errorsOnly=true&since=1h&limit=10'",
@@ -168,7 +168,7 @@ export const ROUTES: RouteDef[] = [
     operationId: 'compareBySpan',
     summary:
       'Compare ONE span across nodes by correlating it in each node\'s own trace. Runs the search dialect to locate the matching span (give an exact `name` plus an `attr` that pins the operation, e.g. name=round&nameRegex=false&attr=span.height=42), then assembles each match\'s subtree into one multi-instance trace whose lanes share a time axis anchored at the EARLIEST matched span, so each node\'s start skew is visible. With target=events, the event search locates matching events and assembles their owning spans. Do not force multiple nodes into one deterministic trace id; compare expects one matching span per node trace. The response is the same shape as GET /traces/:id, so the flame/stats/heatmap views render it directly.',
-    params: SEARCH_QUERY_PARAMS,
+    params: COMPARE_QUERY_PARAMS,
     responseSchema: 'wireTraceSchema',
     example:
       "curl -s 'http://localhost:8080/api/v1/compare?name=round&nameRegex=false&attr=span.height%3D42&since=1h'",

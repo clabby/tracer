@@ -119,8 +119,9 @@ to correlate on (400).
   `perInstance[id]` duration/error stats (add `spanIds=true` for the matching
   span ids). Prefer it for "who is slow on which path" — a few KB, no spans.
 
-The UI exposes this as the **Compare** button (shareable at
-`$BASE/#/compare?...`).
+The UI surfaces this automatically: when a search filters on a span attribute,
+rows that match the same span name and attribute value collapse into one
+`compare` row that opens this view (shareable at `$BASE/#/compare?...`).
 
 ## Other moves
 

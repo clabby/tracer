@@ -15,7 +15,6 @@ import TraceList from './components/TraceList'
 import { shortId } from './lib/format'
 import {
   DEFAULT_FILTER,
-  canCompareFilter,
   type EventSummary,
   type FilterState,
   type RangeSelection,
@@ -156,15 +155,6 @@ export default function App() {
       nonce: prev.nonce + 1,
     }))
   }, [])
-
-  // Compare the current span name + attributes across instances: snapshot the
-  // draft filter and resolved range into the URL hash and switch to the
-  // comparison view (which assembles one synthetic multi-instance trace).
-  const onCompare = useCallback(() => {
-    if (!canCompareFilter(targetRef.current, filterRef.current)) return
-    const query = buildCompareQuery(filterRef.current, resolveRange(rangeRef.current, Date.now()))
-    navigate({ view: 'compare', query })
-  }, [navigate])
 
   // Switching the results tab re-submits the current filter for the new
   // target right away.
@@ -413,7 +403,6 @@ export default function App() {
             range={range}
             onRangeChange={onRangeChange}
             onSearch={onSearch}
-            onCompare={onCompare}
             searching={search.isFetching}
             client={client}
           />

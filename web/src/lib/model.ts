@@ -219,6 +219,10 @@ export const DEFAULT_FILTER: FilterState = {
   limit: 50,
 }
 
+/**
+ * True when the filter pins one operation with an exact span attribute — what
+ * the `/compare` route requires to correlate the same span across nodes.
+ */
 export function hasComparePinningAttr(filter: FilterState): boolean {
   return filter.attrs.some((a) => {
     if (a.scope !== 'span') return false
@@ -226,13 +230,6 @@ export function hasComparePinningAttr(filter: FilterState): boolean {
     if (a.key.trim() === '') return false
     return a.value.trim() !== ''
   })
-}
-
-export function canCompareFilter(target: SearchTarget, filter: FilterState): boolean {
-  if (target !== 'spans') return false
-  if (filter.rawQuery.trim() !== '') return false
-  if (filter.name.trim() === '') return false
-  return hasComparePinningAttr(filter)
 }
 
 /** Time range in unix seconds. */
@@ -293,6 +290,11 @@ export function eventSummaryKey(e: EventSummary): string {
 
 export type TagScope = 'span' | 'resource' | 'event'
 
+/**
+ * Scopes attribute-name suggestions to one span (or event) name, so the key
+ * dropdown offers only attributes actually seen on the spans the search targets
+ * — not every attribute in the store.
+ */
 export interface TagNameContext {
   target: SearchTarget
   name: string
@@ -305,7 +307,7 @@ export interface ITempoClient {
   /** Search for spans containing matching events; one row per span+name. */
   searchEvents(filter: FilterState, range: TimeRange): Promise<EventSummary[]>
   fetchTrace(traceId: string): Promise<TraceModel>
-  /** Tag name suggestions for the given scope. */
+  /** Tag name suggestions for the given scope, optionally scoped to a name. */
   tagNames(scope: TagScope, q?: string, context?: TagNameContext): Promise<string[]>
   /** Tag value suggestions, e.g. tagValues('service.name', 'resource'). */
   tagValues(tag: string, scope: TagScope, q?: string): Promise<string[]>
@@ -345,8 +347,6 @@ export interface SearchPanelProps {
   range: RangeSelection
   onRangeChange: (r: RangeSelection) => void
   onSearch: () => void
-  /** Assemble a cross-instance comparison of the current span name + attrs. */
-  onCompare: () => void
   searching: boolean
   client: ITempoClient
 }
