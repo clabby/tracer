@@ -619,10 +619,10 @@ function nodeTrace(service: string, viewStartOff: number, viewDur: number): Trac
         mkSpan({
           id: 'cccccccccccc0001',
           parent: 'aaaaaaaaaaaa0001',
-          name: 'simplex.voter.view',
+          name: 'round',
           start: at(viewStartOff),
           end: at(viewStartOff + viewDur),
-          attrs: [sattr('view', '1612')],
+          attrs: [sattr('height', '42')],
         }),
         mkSpan({
           id: 'dddddddddddd0001',
@@ -638,7 +638,7 @@ function nodeTrace(service: string, viewStartOff: number, viewDur: number): Trac
 }
 
 function matchFor(model: TraceModel): SpanMatch {
-  const root = [...model.spans.values()].find((s) => s.name === 'simplex.voter.view')!
+  const root = [...model.spans.values()].find((s) => s.name === 'round')!
   return { instance: model.instances[0], root, startUnixMs: model.startUnixMs }
 }
 
@@ -661,7 +661,7 @@ describe('assembleComparison', () => {
     const n1 = byId.get('node-1')!
     const n2 = byId.get('node-2')!
     for (const root of [n1, n2]) {
-      expect(root.name).toBe('simplex.voter.view')
+      expect(root.name).toBe('round')
       expect(root.parentSpanId).toBeNull()
       expect(root.depth).toBe(0)
       expect(root.children).toHaveLength(1)

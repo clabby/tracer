@@ -42,17 +42,17 @@ name + an attribute that pins the operation (e.g. a consensus view) with
 ## Workflow: find the slow / failing node on an operation
 
 Each node runs the operation in its OWN trace, so correlate them by span name +
-an attribute that pins ONE operation (e.g. a consensus view).
+an attribute that pins ONE operation (e.g. a consensus height).
 
 ```sh
 # 1. resolve the span name + the pinning attribute (don't guess names)
-curl -s "$BASE/api/v1/tags/span/name/values?q=view"   # the span
-curl -s "$BASE/api/v1/tags/span/view/values"          # values that pin one operation
+curl -s "$BASE/api/v1/tags/span/name/values?q=round"  # the span
+curl -s "$BASE/api/v1/tags/span/height/values"        # values that pin one operation
 # 2. per-node code-path stats for ONE operation — flat flame nodes, each with
 #    path[] and perInstance[id] = {count,minNs,maxNs,meanNs,totalNs,errorCount}
-curl -s "$BASE/api/v1/compare/aggregate?name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&since=1h"
+curl -s "$BASE/api/v1/compare/aggregate?name=round&nameRegex=false&attr=span.height%3D42&since=1h"
 # 3. the full assembled comparison (one lane per node, aligned on the earliest start):
-curl -s "$BASE/api/v1/compare?name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&since=1h"
+curl -s "$BASE/api/v1/compare?name=round&nameRegex=false&attr=span.height%3D42&since=1h"
 # 4. one node's own trace in full (one trace = one node):
 curl -s "$BASE/api/v1/traces/$TRACE_ID"
 ```
@@ -69,13 +69,13 @@ duration over all of them; which node has the worst tail latency and how far
 behind is it?"*. The pattern, every time:
 
 **1. Resolve the user's words to a span name AND the attribute that pins one
-operation.** Never assume "round" / "commit" / "view" is a literal span name —
+operation.** Never assume "round" / "commit" / "height" is a literal span name —
 discover both:
 
 ```sh
 curl -s "$BASE/api/v1/tags/span/name/values?q=round"   # the span name
-curl -s "$BASE/api/v1/tags/span"                        # candidate pinning attrs (view, height, …)
-curl -s "$BASE/api/v1/tags/span/view/values"           # the operation ids to iterate
+curl -s "$BASE/api/v1/tags/span"                        # candidate pinning attrs (height, role, …)
+curl -s "$BASE/api/v1/tags/span/height/values"         # the operation ids to iterate
 ```
 
 A broad recent search also reveals vocabulary: `rootTraceName` in
@@ -83,7 +83,7 @@ A broad recent search also reveals vocabulary: `rootTraceName` in
 top-level operation, and `/compare/aggregate` `path[]`s name every phase.
 
 **2. Enumerate the N operations.** Each operation is one value of the pinning
-attribute (e.g. `view=1612`). Get the recent values from
+attribute (e.g. `height=42`). Get the recent values from
 `/api/v1/tags/span/<attr>/values` (widen `since` if you need more); each value
 is one operation to compare across nodes.
 
@@ -127,7 +127,7 @@ The UI exposes this as the **Compare** button (shareable at
 - Discover the attribute space before filtering:
   `GET /api/v1/tags/span`, `GET /api/v1/tags/resource/service.name/values`.
 - Check a filter without running it:
-  `GET /api/v1/traceql/compile?attr=span.view%3D5&minDuration=100ms`
+  `GET /api/v1/traceql/compile?attr=span.height%3D42&minDuration=100ms`
   (returns the exact TraceQL a search would execute; search responses echo
   it under `query.traceql`).
 - Structured POST bodies (`{"filter": {...}, "range": {"lastSeconds": 900}}`)
@@ -141,7 +141,7 @@ The UI exposes this as the **Compare** button (shareable at
 When you mention a notable operation (a straggler round, an error spike, an
 outlier), include its web UI link so a human can open it directly. For a
 cross-node comparison, link the compare view:
-`$BASE/#/compare?name=<span>&nameRegex=false&attr=span.view=<id>&since=1h` —
+`$BASE/#/compare?name=<span>&nameRegex=false&attr=span.height=<id>&since=1h` —
 it shows per-node lanes, stats, and the heatmap for that operation. For a single
 node, link its trace: `$BASE/#/trace/<traceId>`.
 

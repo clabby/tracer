@@ -164,7 +164,7 @@ describe('handleTraceSummary', () => {
   })
 })
 
-// Two SEPARATE node traces, each with a `simplex.voter.view` span (view=1612)
+// Two SEPARATE node traces, each with a `round` span (height=42)
 // at a DIFFERENT absolute offset — exercises rebasing and id-prefixing.
 const COMPARE_SEARCH = {
   traces: [
@@ -172,14 +172,14 @@ const COMPARE_SEARCH = {
       traceID: 'aa01',
       startTimeUnixNano: at(1000),
       spanSets: [
-        { matched: 1, spans: [{ spanID: 'cccccccccccc0001', name: 'simplex.voter.view', attributes: [] }] },
+        { matched: 1, spans: [{ spanID: 'cccccccccccc0001', name: 'round', attributes: [] }] },
       ],
     },
     {
       traceID: 'bb02',
       startTimeUnixNano: at(2000),
       spanSets: [
-        { matched: 1, spans: [{ spanID: 'cccccccccccc0002', name: 'simplex.voter.view', attributes: [] }] },
+        { matched: 1, spans: [{ spanID: 'cccccccccccc0002', name: 'round', attributes: [] }] },
       ],
     },
   ],
@@ -205,10 +205,10 @@ const nodeOtlp = (
               traceId,
               spanId: viewId,
               parentSpanId: rootId,
-              name: 'simplex.voter.view',
+              name: 'round',
               startTimeUnixNano: at(viewOff),
               endTimeUnixNano: at(viewOff + viewDur),
-              attributes: [sattr('view', '1612')],
+              attributes: [sattr('height', '42')],
             },
             {
               traceId,
@@ -252,7 +252,7 @@ describe('handleCompare', () => {
 
   test('assembles each node onto a shared axis anchored at the earliest start', async () => {
     const { status, body } = await compare(
-      'name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&from=1749571100&to=1749571300',
+      'name=round&nameRegex=false&attr=span.height%3D42&from=1749571100&to=1749571300',
     )
     expect(status).toBe(200)
     expect(body.traceId).toBe('compare')
@@ -264,7 +264,7 @@ describe('handleCompare', () => {
       body.spans.find((s) => s.spanId === body.instances.find((i) => i.id === id)!.rootSpanIds[0])!
     for (const id of ['node-1', 'node-2']) {
       const root = rootOf(id)
-      expect(root.name).toBe('simplex.voter.view')
+      expect(root.name).toBe('round')
       expect(root.parentSpanId).toBeNull()
       expect(root.instanceId).toBe(id)
     }
@@ -277,8 +277,8 @@ describe('handleCompare', () => {
     expect(body.spans.some((s) => s.spanId.startsWith('node-2::'))).toBe(true)
     // process roots are dropped; only each view subtree (view + vote) survives.
     expect(body.spans.map((s) => s.name).sort()).toEqual([
-      'simplex.voter.view',
-      'simplex.voter.view',
+      'round',
+      'round',
       'vote',
       'vote',
     ])
@@ -292,7 +292,7 @@ describe('handleCompare', () => {
 
   test('compare searches broadly even when the UI result limit is small', async () => {
     const { body } = await compare(
-      'name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&from=1749571100&to=1749571300&limit=1',
+      'name=round&nameRegex=false&attr=span.height%3D42&from=1749571100&to=1749571300&limit=1',
     )
     expect(body.instances.map((i) => i.id)).toEqual(['node-1', 'node-2'])
     expect(lastSearchUrl?.searchParams.get('limit')).toBe('1000')
@@ -302,12 +302,12 @@ describe('handleCompare', () => {
   test('compare/aggregate gives per-node code-path stats over the assembly', async () => {
     const { status, body } = await get<AggregateResponse>(
       handleCompareAggregate,
-      '/api/v1/compare/aggregate?name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&from=1749571100&to=1749571300&spanIds=true',
+      '/api/v1/compare/aggregate?name=round&nameRegex=false&attr=span.height%3D42&from=1749571100&to=1749571300&spanIds=true',
       {},
     )
     expect(status).toBe(200)
     expect(body.instances).toEqual(['node-1', 'node-2'])
-    const view = body.nodes.find((n) => n.name === 'simplex.voter.view')!
+    const view = body.nodes.find((n) => n.name === 'round')!
     expect(view.depth).toBe(0)
     expect(view.count).toBe(2)
     expect(view.perInstance['node-1'].maxNs).toBe(400_000)
@@ -316,14 +316,14 @@ describe('handleCompare', () => {
     expect(view.spanIds!['node-1']).toEqual(['node-1::cccccccccccc0001'])
     // vote rides under the view in the merged tree
     const vote = body.nodes.find((n) => n.name === 'vote')!
-    expect(vote.path).toEqual(['simplex.voter.view', 'vote'])
+    expect(vote.path).toEqual(['round', 'vote'])
     expect(vote.depth).toBe(1)
   })
 
   test('no spans matched: empty model carries a warning, not an error', async () => {
     globalThis.fetch = (async () => Response.json({ traces: [] })) as unknown as typeof fetch
     const { status, body } = await compare(
-      'name=nope&nameRegex=false&attr=span.view%3D1612&from=1749571100&to=1749571300',
+      'name=nope&nameRegex=false&attr=span.height%3D42&from=1749571100&to=1749571300',
     )
     expect(status).toBe(200)
     expect(body.instances).toEqual([])

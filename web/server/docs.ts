@@ -62,17 +62,17 @@ ${routeLines}
 ### Which node was slow on a given operation?
 
 Each node runs the operation in its OWN trace, so correlate them by span name +
-an attribute that pins the operation (e.g. a consensus view). /compare assembles
+an attribute that pins the operation (e.g. a consensus height). /compare assembles
 the lanes; /compare/aggregate gives the per-node stats per code path directly.
 
 \`\`\`sh
 # discover the span name + the attribute that identifies one operation
-curl -s "$BASE/api/v1/tags/span/name/values?q=view"
+curl -s "$BASE/api/v1/tags/span/name/values?q=round"
 # per-node code-path stats for that one operation, no spans downloaded:
-curl -s "$BASE/api/v1/compare/aggregate?name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&since=1h"
+curl -s "$BASE/api/v1/compare/aggregate?name=round&nameRegex=false&attr=span.height%3D42&since=1h"
 #   -> on each node, perInstance[instanceId].meanNs reveals the straggler
 # or the full assembled trace (one lane per node, aligned on the earliest start):
-curl -s "$BASE/api/v1/compare?name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&since=1h"
+curl -s "$BASE/api/v1/compare?name=round&nameRegex=false&attr=span.height%3D42&since=1h"
 \`\`\`
 
 ### Chase errors
@@ -91,9 +91,9 @@ curl -s "$BASE/api/v1/traces/$TRACE_ID"
 curl -s "$BASE/api/v1/tags/span"
 curl -s "$BASE/api/v1/tags/resource/service.name/values"
 # compile WITHOUT executing to check a filter
-curl -s "$BASE/api/v1/traceql/compile?attr=span.view%3D5&minDuration=100ms"
+curl -s "$BASE/api/v1/traceql/compile?attr=span.height%3D42&minDuration=100ms"
 # then run it
-curl -s "$BASE/api/v1/search/traces?attr=span.view%3D5&minDuration=100ms&since=1h"
+curl -s "$BASE/api/v1/search/traces?attr=span.height%3D42&minDuration=100ms&since=1h"
 \`\`\`
 
 ### Full trace, when rollups are not enough

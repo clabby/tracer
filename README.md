@@ -19,8 +19,8 @@ broadcast) across many nodes at once. Most viewers show you one node's spans at
 a time. tracer is built around the cross-node view:
 
 - **One lane per node.** Each node emits its own trace; **Compare** correlates
-  the same span across them by name + attribute (e.g. `simplex.voter.view`,
-  `view=1612`) and lays each node out on its own lane on a shared time axis — so
+  the same span across them by name + attribute (e.g. `round`, `height=42`)
+  and lays each node out on its own lane on a shared time axis — so
   you see who started late, who stalled, and how the work overlapped across the
   cluster.
 - **Merged aggregate flame.** Collapse all instances onto one flame, each span
@@ -101,8 +101,8 @@ curl -s 'http://localhost:8080/api/v1/search/traces?errorsOnly=true&since=1h&lim
 curl -s  http://localhost:8080/api/v1/traces/$TRACE_ID/summary     # one node's rollup, no spans
 
 # correlate one span across nodes that each emit their OWN trace (name + attribute):
-curl -s 'http://localhost:8080/api/v1/compare?name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&since=1h'
-curl -s 'http://localhost:8080/api/v1/compare/aggregate?name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&since=1h'  # per-node stats per code path
+curl -s 'http://localhost:8080/api/v1/compare?name=round&nameRegex=false&attr=span.height%3D42&since=1h'
+curl -s 'http://localhost:8080/api/v1/compare/aggregate?name=round&nameRegex=false&attr=span.height%3D42&since=1h'  # per-node stats per code path
 ```
 
 The API is self-describing (start at `GET /api/v1`); all errors are RFC 9457

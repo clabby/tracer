@@ -60,7 +60,7 @@ const SEARCH_QUERY_PARAMS: RouteParamDoc[] = [
     in: 'query',
     description:
       'Attribute predicate `<scope>.<key><op><value>`; scope in {span, resource, event}, op in {=, !=, =~, !~, >, <, >=, <=}. Repeatable (ANDed).',
-    example: 'span.view=notarization',
+    example: 'span.height=42',
   },
   {
     name: 'q',
@@ -157,11 +157,11 @@ export const ROUTES: RouteDef[] = [
     pattern: '/api/v1/compare',
     operationId: 'compareBySpan',
     summary:
-      'Compare ONE span across nodes by correlating it in each node\'s own trace. Runs the search dialect to locate the matching span (give an exact `name` plus an `attr` that pins the operation, e.g. name=simplex.voter.view&nameRegex=false&attr=span.view=1612), then assembles each match\'s subtree into one multi-instance trace whose lanes share a time axis anchored at the EARLIEST matched span, so each node\'s start skew is visible. The response is the same shape as GET /traces/:id, so the flame/stats/heatmap views render it directly.',
+      'Compare ONE span across nodes by correlating it in each node\'s own trace. Runs the search dialect to locate the matching span (give an exact `name` plus an `attr` that pins the operation, e.g. name=round&nameRegex=false&attr=span.height=42), then assembles each match\'s subtree into one multi-instance trace whose lanes share a time axis anchored at the EARLIEST matched span, so each node\'s start skew is visible. The response is the same shape as GET /traces/:id, so the flame/stats/heatmap views render it directly.',
     params: SEARCH_QUERY_PARAMS,
     responseSchema: 'wireTraceSchema',
     example:
-      "curl -s 'http://localhost:8080/api/v1/compare?name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&since=1h'",
+      "curl -s 'http://localhost:8080/api/v1/compare?name=round&nameRegex=false&attr=span.height%3D42&since=1h'",
     handler: handleCompare,
   },
   {
@@ -169,7 +169,7 @@ export const ROUTES: RouteDef[] = [
     pattern: '/api/v1/compare/aggregate',
     operationId: 'compareAggregate',
     summary:
-      'The merged ("aggregate") flame tree of a comparison: the same span correlated across nodes (search dialect, e.g. name=simplex.voter.view&nameRegex=false&attr=span.view=1612), assembled and grouped by name-path with per-instance duration/error stats. The cross-node code-path view — compare the same path across every node without downloading spans.',
+      'The merged ("aggregate") flame tree of a comparison: the same span correlated across nodes (search dialect, e.g. name=round&nameRegex=false&attr=span.height=42), assembled and grouped by name-path with per-instance duration/error stats. The cross-node code-path view — compare the same path across every node without downloading spans.',
     params: [
       ...SEARCH_QUERY_PARAMS,
       {
@@ -181,7 +181,7 @@ export const ROUTES: RouteDef[] = [
     ],
     responseSchema: 'aggregateResponseSchema',
     example:
-      "curl -s 'http://localhost:8080/api/v1/compare/aggregate?name=simplex.voter.view&nameRegex=false&attr=span.view%3D1612&since=1h'",
+      "curl -s 'http://localhost:8080/api/v1/compare/aggregate?name=round&nameRegex=false&attr=span.height%3D42&since=1h'",
     handler: handleCompareAggregate,
   },
   {

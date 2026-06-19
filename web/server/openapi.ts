@@ -69,7 +69,7 @@ export function buildOpenApi(routes: readonly RouteDef[]): Record<string, unknow
       title: 'tracer API',
       version: 'v1',
       description:
-        'REST middle layer over Grafana Tempo for multi-instance traces: spans from every node sharing a trace id, deduplicated and split per instance, with merged-aggregate views. GET /api/v1 is the discovery index; GET /api/v1/docs is an agent-oriented guide.',
+        'REST middle layer over Grafana Tempo for distributed-system traces: fetch one trace, or correlate matching spans by name + attribute via /compare. GET /api/v1 is the discovery index; GET /api/v1/docs is an agent-oriented guide.',
     },
     servers: [{ url: '/' }],
     paths,

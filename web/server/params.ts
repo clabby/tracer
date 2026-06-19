@@ -79,7 +79,7 @@ function parseAttrs(raw: string[], errors: InvalidParam[]): AttrFilter[] {
       errors.push({
         name: 'attr',
         reason: `expected <scope>.<key><op><value> with scope in {span, resource, event} and op in {=, !=, =~, !~, >, <, >=, <=}; got "${v}"`,
-        example: 'span.view=notarization',
+        example: 'span.height=42',
       })
       continue
     }

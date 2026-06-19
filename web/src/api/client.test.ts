@@ -49,17 +49,17 @@ describe('buildCompareQuery', () => {
     const q = buildCompareQuery(
       {
         ...base,
-        name: 'simplex.voter.view',
+        name: 'round',
         nameIsRegex: false,
-        attrs: [{ id: 'a', scope: 'span', key: 'view', op: '=', value: '1612' }],
+        attrs: [{ id: 'a', scope: 'span', key: 'height', op: '=', value: '42' }],
         limit: 30,
       },
       { from: 1749571100.4, to: 1749571300.6 },
     )
     const p = new URLSearchParams(q)
-    expect(p.get('name')).toBe('simplex.voter.view')
+    expect(p.get('name')).toBe('round')
     expect(p.get('nameRegex')).toBe('false')
-    expect(p.get('attr')).toBe('span.view=1612')
+    expect(p.get('attr')).toBe('span.height=42')
     expect(p.has('limit')).toBe(false)
     // range is floored/ceiled to whole unix seconds
     expect(p.get('from')).toBe('1749571100')
