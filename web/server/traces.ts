@@ -177,17 +177,25 @@ async function assembleFromQuery(
       continue
     }
     const byInstance = new Map(entry.model.instances.map((i) => [i.id, i]))
-    for (const spanId of entry.s.matchedSpanIds) {
+    const roots = [...new Set(entry.s.matchedSpanIds)].flatMap((spanId) => {
       const root = entry.model.spans.get(spanId)
-      if (root === undefined) continue
-      const instance = byInstance.get(root.instanceId)
-      if (instance === undefined) continue
-      let id = instance.id
-      if (usedIds.has(id)) id = `${instance.id}#${entry.s.traceId.slice(0, 6)}`
-      if (usedIds.has(id)) id = `${instance.id}#${root.spanId.slice(0, 8)}`
-      usedIds.add(id)
-      matches.push({ instance: { ...instance, id }, root, startUnixMs: entry.model.startUnixMs })
+      return root === undefined ? [] : [root]
+    })
+    if (roots.length > 1) {
+      warnings.push(
+        `trace ${entry.s.traceId}: compare expects one matching span per node trace; found ${roots.length}. Do not force multiple nodes into one trace id.`,
+      )
+      continue
     }
+    const root = roots[0]
+    if (root === undefined) continue
+    const instance = byInstance.get(root.instanceId)
+    if (instance === undefined) continue
+    let id = instance.id
+    if (usedIds.has(id)) id = `${instance.id}#${entry.s.traceId.slice(0, 6)}`
+    if (usedIds.has(id)) id = `${instance.id}#${root.spanId.slice(0, 8)}`
+    usedIds.add(id)
+    matches.push({ instance: { ...instance, id }, root, startUnixMs: entry.model.startUnixMs })
   }
 
   const model = assembleComparison(matches, COMPARE_TRACE_ID)

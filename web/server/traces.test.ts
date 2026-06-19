@@ -229,6 +229,12 @@ const nodeOtlp = (
 // traces share t0 (process @ 0), so node-2 enters the view 2ms after node-1.
 const NODE1_OTLP = nodeOtlp('node-1', 'aa01', 'aaaa0000aaaa0001', 'cccccccccccc0001', 'dddd0000dddd0001', 1_000_000, 400_000)
 const NODE2_OTLP = nodeOtlp('node-2', 'bb02', 'aaaa0000aaaa0002', 'cccccccccccc0002', 'dddd0000dddd0002', 3_000_000, 600_000)
+const SHARED_TRACE_OTLP = {
+  resourceSpans: [
+    ...NODE1_OTLP.resourceSpans,
+    ...nodeOtlp('node-2', 'aa01', 'aaaa0000aaaa0002', 'cccccccccccc0002', 'dddd0000dddd0002', 3_000_000, 600_000).resourceSpans,
+  ],
+}
 
 describe('handleCompare', () => {
   let lastSearchUrl: URL | null = null
@@ -297,6 +303,39 @@ describe('handleCompare', () => {
     expect(body.instances.map((i) => i.id)).toEqual(['node-1', 'node-2'])
     expect(lastSearchUrl?.searchParams.get('limit')).toBe('1000')
     expect(lastSearchUrl?.searchParams.get('spss')).toBe('1000')
+  })
+
+  test('compare does not assemble multiple node matches from one trace id', async () => {
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      if (url.pathname === '/api/search') {
+        return Response.json({
+          traces: [
+            {
+              traceID: 'aa01',
+              startTimeUnixNano: at(1000),
+              spanSets: [
+                {
+                  matched: 2,
+                  spans: [
+                    { spanID: 'cccccccccccc0001', name: 'round', attributes: [] },
+                    { spanID: 'cccccccccccc0002', name: 'round', attributes: [] },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+      }
+      if (url.pathname === '/api/v2/traces/aa01') return Response.json(SHARED_TRACE_OTLP)
+      return new Response('not found', { status: 404 })
+    }) as unknown as typeof fetch
+
+    const { body } = await compare(
+      'name=round&nameRegex=false&attr=span.height%3D42&from=1749571100&to=1749571300',
+    )
+    expect(body.instances).toEqual([])
+    expect(body.warnings.some((w) => w.includes('Do not force multiple nodes into one trace id'))).toBe(true)
   })
 
   test('compare/aggregate gives per-node code-path stats over the assembly', async () => {
