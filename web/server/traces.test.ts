@@ -454,9 +454,11 @@ describe('handleCompare', () => {
 
 describe('tag handlers', () => {
   test('names + values delegate to the shared client (v2 shapes)', async () => {
+    let tagNamesUrl = new URL('http://tempo.test/unseen')
     globalThis.fetch = (async (input: string | URL | Request) => {
       const url = new URL(String(input))
       if (url.pathname === '/api/v2/search/tags') {
+        tagNamesUrl = url
         return Response.json({ scopes: [{ name: 'span', tags: ['view', 'height', 'view'] }] })
       }
       if (url.pathname.startsWith('/api/v2/search/tag/')) {
@@ -468,6 +470,12 @@ describe('tag handlers', () => {
     let url = new URL('http://x/api/v1/tags/span')
     let res = await handleTagNames(new Request(url), url, { scope: 'span' }, deps())
     expect(await res.json()).toEqual({ scope: 'span', names: ['height', 'view'] })
+    expect(tagNamesUrl.searchParams.get('q')).toBe(null)
+
+    url = new URL('http://x/api/v1/tags/span?name=round&nameRegex=false&q=he')
+    res = await handleTagNames(new Request(url), url, { scope: 'span' }, deps())
+    expect(await res.json()).toEqual({ scope: 'span', names: ['height'] })
+    expect(tagNamesUrl.searchParams.get('q')).toBe('{ name = "round" }')
 
     url = new URL('http://x/api/v1/tags/resource/service.name/values')
     res = await handleTagValues(new Request(url), url, { scope: 'resource', tag: 'service.name' }, deps())

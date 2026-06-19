@@ -255,10 +255,28 @@ export const ROUTES: RouteDef[] = [
     pattern: '/api/v1/tags/:scope',
     operationId: 'getTagNames',
     summary:
-      'Attribute-name suggestions for a scope (span, resource, or event) — discover the attribute space before building filters.',
+      'Attribute-name suggestions for a scope (span, resource, or event). With `name`, suggestions are limited to attributes seen on matching spans or events.',
     params: [
       { name: 'scope', in: 'path', description: 'span, resource, or event.', example: 'resource' },
       { name: 'q', in: 'query', description: 'Case-insensitive substring filter.', example: 'service' },
+      {
+        name: 'target',
+        in: 'query',
+        description: 'Name context target: spans (default) or events.',
+        example: 'spans',
+      },
+      {
+        name: 'name',
+        in: 'query',
+        description: 'Optional span name, or event name when target=events, used to scope suggestions.',
+        example: 'round',
+      },
+      {
+        name: 'nameRegex',
+        in: 'query',
+        description: 'Interpret `name` as a regex (default true) or exact string (false).',
+        example: 'false',
+      },
     ],
     responseSchema: 'tagNamesResponseSchema',
     example: 'curl -s http://localhost:8080/api/v1/tags/span',

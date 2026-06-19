@@ -10,12 +10,13 @@ import type {
   EventSummary,
   FilterState,
   ITempoClient,
+  TagNameContext,
   TagScope,
   TimeRange,
   TraceModel,
   TraceSummary,
 } from '../lib/model'
-import { eventSummaryKey, levelFromAttributes } from '../lib/model'
+import { DEFAULT_FILTER, eventSummaryKey, levelFromAttributes } from '../lib/model'
 import { buildTraceQL } from '../lib/traceql'
 import { parseAttributes, parseTrace } from '../lib/trace'
 
@@ -200,8 +201,11 @@ export class TempoClient implements ITempoClient {
 
   // ------------------------------------------------------------------ tags --
 
-  async tagNames(scope: TagScope, q?: string): Promise<string[]> {
-    const data = await this.getJson(`/api/v2/search/tags?scope=${scope}`)
+  async tagNames(scope: TagScope, q?: string, context?: TagNameContext): Promise<string[]> {
+    const params = new URLSearchParams({ scope })
+    const traceql = tagNameTraceQL(context)
+    if (traceql !== null) params.set('q', traceql)
+    const data = await this.getJson(`/api/v2/search/tags?${params.toString()}`)
     const names: string[] = []
     const scopes =
       typeof data === 'object' && data !== null && Array.isArray((data as { scopes?: unknown }).scopes)
@@ -252,6 +256,14 @@ export class TempoClient implements ITempoClient {
 }
 
 // ----------------------------------------------------- response mapping --
+
+function tagNameTraceQL(context?: TagNameContext): string | null {
+  if (context === undefined || context.name.trim() === '') return null
+  return buildTraceQL(
+    { ...DEFAULT_FILTER, name: context.name, nameIsRegex: context.nameIsRegex },
+    context.target,
+  )
+}
 
 /** Defensively map one entry of the /api/search response to a TraceSummary. */
 function toSummary(raw: unknown): TraceSummary | null {

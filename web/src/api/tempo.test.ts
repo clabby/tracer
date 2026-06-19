@@ -62,3 +62,42 @@ describe('TempoClient fallback deadline', () => {
     expect(calls).toHaveLength(1)
   })
 })
+
+describe('TempoClient tag names', () => {
+  test('filters tag names by span name context through Tempo TraceQL q', async () => {
+    let seen = new URL('http://tempo.test/unseen')
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      seen = new URL(String(input))
+      return Response.json({ scopes: [{ name: 'span', tags: ['role', 'height'] }] })
+    }) as unknown as typeof fetch
+
+    const client = new TempoClient('http://tempo.test')
+    const names = await client.tagNames('span', 'he', {
+      target: 'spans',
+      name: 'round',
+      nameIsRegex: false,
+    })
+
+    expect(seen.pathname).toBe('/api/v2/search/tags')
+    expect(seen.searchParams.get('scope')).toBe('span')
+    expect(seen.searchParams.get('q')).toBe('{ name = "round" }')
+    expect(names).toEqual(['height'])
+  })
+
+  test('filters tag names by event name context when searching events', async () => {
+    let seen = new URL('http://tempo.test/unseen')
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      seen = new URL(String(input))
+      return Response.json({ scopes: [{ name: 'event', tags: ['from.node'] }] })
+    }) as unknown as typeof fetch
+
+    const client = new TempoClient('http://tempo.test')
+    await client.tagNames('event', undefined, {
+      target: 'events',
+      name: 'commit',
+      nameIsRegex: true,
+    })
+
+    expect(seen.searchParams.get('q')).toBe('{ event:name =~ ".*(commit).*" }')
+  })
+})

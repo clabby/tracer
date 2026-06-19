@@ -13,6 +13,7 @@ import type {
   FilterState,
   ITempoClient,
   SearchTarget,
+  TagNameContext,
   TagScope,
   TimeRange,
   TraceModel,
@@ -163,8 +164,15 @@ export class ApiClient implements ITempoClient {
 
   // ------------------------------------------------------------------ tags --
 
-  async tagNames(scope: TagScope, q?: string): Promise<string[]> {
-    const qs = q !== undefined && q.trim() !== '' ? `?q=${encodeURIComponent(q)}` : ''
+  async tagNames(scope: TagScope, q?: string, context?: TagNameContext): Promise<string[]> {
+    const params = new URLSearchParams()
+    if (q !== undefined && q.trim() !== '') params.set('q', q)
+    if (context !== undefined && context.name.trim() !== '') {
+      params.set('target', context.target)
+      params.set('name', context.name)
+      params.set('nameRegex', String(context.nameIsRegex))
+    }
+    const qs = params.size > 0 ? `?${params.toString()}` : ''
     const data = (await this.request('GET', `/tags/${scope}${qs}`)) as TagNamesResponse
     return data.names
   }

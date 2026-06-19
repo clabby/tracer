@@ -6,7 +6,7 @@
 
 import { useMemo, useState } from 'react'
 import type { ChangeEvent, KeyboardEvent } from 'react'
-import type { AttrFilter, AttrOp, FilterState, Level, SearchPanelProps } from '../lib/model'
+import type { AttrFilter, AttrOp, FilterState, Level, SearchPanelProps, TagNameContext } from '../lib/model'
 import { LEVELS, canCompareFilter, colorIndexForService, instanceColorVar } from '../lib/model'
 import { clamp, isValidDurationInput, uid } from '../lib/format'
 import { buildTraceQL } from '../lib/traceql'
@@ -33,6 +33,10 @@ export default function SearchPanel({
   const compiled = useMemo(() => buildTraceQL(filter, target), [filter, target])
   const rawActive = filter.rawQuery.trim() !== ''
   const canCompare = canCompareFilter(target, filter)
+  const tagNameContext = useMemo<TagNameContext | undefined>(() => {
+    if (filter.name.trim() === '') return undefined
+    return { target, name: filter.name, nameIsRegex: filter.nameIsRegex }
+  }, [filter.name, filter.nameIsRegex, target])
 
   function set(patch: Partial<FilterState>) {
     onChange({ ...filter, ...patch })
@@ -239,7 +243,7 @@ export default function SearchPanel({
                     value={a.key}
                     onChange={(v) => updateAttr(a.id, { key: v })}
                     placeholder="key"
-                    fetchOptions={(q) => client.tagNames(a.scope, q)}
+                    fetchOptions={(q) => client.tagNames(a.scope, q, tagNameContext)}
                   />
                   <button
                     type="button"

@@ -293,6 +293,12 @@ export function eventSummaryKey(e: EventSummary): string {
 
 export type TagScope = 'span' | 'resource' | 'event'
 
+export interface TagNameContext {
+  target: SearchTarget
+  name: string
+  nameIsRegex: boolean
+}
+
 export interface ITempoClient {
   readonly baseUrl: string
   searchTraces(filter: FilterState, range: TimeRange): Promise<TraceSummary[]>
@@ -300,7 +306,7 @@ export interface ITempoClient {
   searchEvents(filter: FilterState, range: TimeRange): Promise<EventSummary[]>
   fetchTrace(traceId: string): Promise<TraceModel>
   /** Tag name suggestions for the given scope. */
-  tagNames(scope: TagScope, q?: string): Promise<string[]>
+  tagNames(scope: TagScope, q?: string, context?: TagNameContext): Promise<string[]>
   /** Tag value suggestions, e.g. tagValues('service.name', 'resource'). */
   tagValues(tag: string, scope: TagScope, q?: string): Promise<string[]>
   ping(): Promise<boolean>

@@ -1,6 +1,12 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 import type { FilterState } from '../lib/model'
-import { buildCompareQuery, sanitizeFilter } from './client'
+import { ApiClient, buildCompareQuery, sanitizeFilter } from './client'
+
+const realFetch = globalThis.fetch
+
+afterEach(() => {
+  globalThis.fetch = realFetch
+})
 
 const base: FilterState = {
   services: [],
@@ -110,5 +116,24 @@ describe('buildCompareQuery', () => {
     const p = new URLSearchParams(q)
     expect(p.getAll('attr')).toEqual([])
     expect(p.has('minDuration')).toBe(false)
+  })
+})
+
+describe('ApiClient tags', () => {
+  test('serializes attribute-name substring and name context separately', async () => {
+    let seen = new URL('http://x/unseen')
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      seen = new URL(String(input), 'http://x')
+      return Response.json({ scope: 'span', names: [] })
+    }) as unknown as typeof fetch
+
+    const client = new ApiClient('/api/v1')
+    await client.tagNames('span', 'hei', { target: 'spans', name: 'round', nameIsRegex: false })
+
+    expect(seen.pathname).toBe('/api/v1/tags/span')
+    expect(seen.searchParams.get('q')).toBe('hei')
+    expect(seen.searchParams.get('target')).toBe('spans')
+    expect(seen.searchParams.get('name')).toBe('round')
+    expect(seen.searchParams.get('nameRegex')).toBe('false')
   })
 })
