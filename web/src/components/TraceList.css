@@ -95,6 +95,24 @@
   font-size: var(--font-size-sm);
 }
 
+/* Hovering a service swatch reveals the instance name (flamegraph-tooltip style). */
+.tl-tip {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  font-size: var(--font-size-sm);
+  color: var(--text);
+  white-space: nowrap;
+}
+
 .tl-error {
   color: var(--error);
 }

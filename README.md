@@ -23,9 +23,9 @@ a time. tracer is built around the cross-node view:
   and lays each node out on its own lane on a shared time axis — so
   you see who started late, who stalled, and how the work overlapped across the
   cluster.
-- **Trace IDs stay real.** Do not force every node to reuse one deterministic
-  trace ID for a logical operation. Let OpenTelemetry create normal trace IDs;
-  use span names and attributes for cross-node correlation.
+- **Trace IDs stay real.** Each node emits its operations as ordinary,
+  independent traces with standard OpenTelemetry trace IDs; cross-node
+  correlation is by span name + attributes, never a shared trace ID.
 - **Merged aggregate flame.** Collapse all instances onto one flame, each span
   split into per-instance sub-bars, to compare the same code path across nodes.
 - **Cross-node skew, surfaced.** A **stats** tab (per span: p50/p95/max, error
@@ -46,8 +46,8 @@ purpose-built viewer that goes further:
   merged flame, and the cross-node stats/heatmap above have no equivalent in
   Grafana's single-tree view.
 - **A real flamegraph canvas** — wheel-zoom around the cursor, drag-pan, a
-  scrubbable timeline minimap, **self-time** and **wait-gap** shading, and
-  live **span search/highlight** — fast for ~10k spans.
+  scrubbable timeline minimap, **self-time** shading, and live
+  **span search/highlight** — fast for ~10k spans.
 - **Events are first-class** — an events overlay on the flame plus a dedicated
   searchable events tab.
 - **Zero setup to read.** No datasource config, no login: the deployment is

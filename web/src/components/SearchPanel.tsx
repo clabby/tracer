@@ -7,7 +7,7 @@
 import { useMemo, useState } from 'react'
 import type { ChangeEvent, KeyboardEvent } from 'react'
 import type { AttrFilter, AttrOp, FilterState, Level, SearchPanelProps, TagNameContext } from '../lib/model'
-import { LEVELS, colorIndexForService, instanceColorVar } from '../lib/model'
+import { DEFAULT_FILTER, LEVELS, colorIndexForService, instanceColorVar, isFilterConfigured } from '../lib/model'
 import { clamp, isValidDurationInput, uid } from '../lib/format'
 import { buildTraceQL } from '../lib/traceql'
 import Combobox from './Combobox'
@@ -40,6 +40,14 @@ export default function SearchPanel({
 
   function set(patch: Partial<FilterState>) {
     onChange({ ...filter, ...patch })
+  }
+
+  // Reset every filter on this tab back to "show all" and re-run the search.
+  function clearFilter() {
+    onChange(DEFAULT_FILTER)
+    setProviderQuery('')
+    setEditingRaw(false)
+    onSearch()
   }
 
   // ------------------------------------------------------------- providers --
@@ -344,6 +352,16 @@ export default function SearchPanel({
           {searching && <span className="spinner" aria-hidden="true" />}
           {searching ? 'searching…' : 'Search'}
         </button>
+        {isFilterConfigured(filter) && (
+          <button
+            type="button"
+            className="btn btn-ghost sp-clear"
+            title="clear all filters and show everything"
+            onClick={clearFilter}
+          >
+            Clear
+          </button>
+        )}
       </div>
     </div>
   )

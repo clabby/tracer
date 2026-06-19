@@ -157,7 +157,7 @@ export const wireInstanceSchema = {
     },
     colorIndex: {
       type: 'integer',
-      description: 'Index into the UI categorical palette (display concern).',
+      description: 'Hue (0-359) for the instance\'s generated color (display concern).',
     },
     spanCount: { type: 'integer', description: 'Number of spans emitted by this instance.' },
     maxDepth: { type: 'integer', description: 'Deepest span depth within this instance.' },

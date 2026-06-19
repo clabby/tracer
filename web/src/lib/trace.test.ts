@@ -676,10 +676,27 @@ describe('assembleComparison', () => {
 
     // extent = earliest origin to the latest end (node-2's 2ms-late 0.6ms view)
     expect(model.durationNs).toBe(2_600_000)
-    // ids are instance-prefixed so the two traces' identical ids never collide
-    expect(model.spans.has('node-1::cccccccccccc0001')).toBe(true)
-    expect(model.spans.has('node-2::cccccccccccc0001')).toBe(true)
+    // ids are prefixed per-match so the two traces' identical source ids never collide
+    expect(n1.spanId).not.toBe(n2.spanId)
     expect(model.spans.size).toBe(4)
+  })
+
+  test('groups matches from the same provider into one lane', () => {
+    // node-1 leads two separate rounds (two traces). They must collapse into a
+    // single node-1 lane holding both subtrees — not two node-1 lanes.
+    const r1 = nodeTrace('node-1', 1_000_000, 200_000)
+    const r2 = nodeTrace('node-1', 5_000_000, 200_000)
+    const model = assembleComparison([matchFor(r1), matchFor(r2)], 'compare')
+    expect(model.instances).toHaveLength(1)
+    const lane = model.instances[0]
+    expect(lane.id).toBe('node-1')
+    expect(lane.rootSpans).toHaveLength(2)
+    expect(lane.spanCount).toBe(4) // two subtrees × (round + vote)
+    // both subtrees share the lane; ids don't collide despite identical source ids
+    expect(model.spans.size).toBe(4)
+    // earliest subtree anchors at 0; the later one is offset by its 4ms skew
+    const starts = lane.rootSpans.map((s) => s.startNs).sort((a, b) => a - b)
+    expect(starts).toEqual([0, 4_000_000])
   })
 
   test('a single match anchors at 0; subtree spanCount/maxDepth are right', () => {

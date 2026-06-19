@@ -9,7 +9,7 @@
 
 import { useMemo } from 'react'
 import type { SpanStatsProps } from '../lib/model'
-import { colorIndexForService, instanceColorVar } from '../lib/model'
+import { instanceColorVar } from '../lib/model'
 import { formatNs } from '../lib/format'
 import './SpanStats.css'
 
@@ -93,6 +93,8 @@ export default function SpanStats({ model }: SpanStatsProps) {
 
   const instName = (id: string) =>
     model.instances.find((i) => i.id === id)?.serviceName ?? id
+  // Color the straggler by its instance hue so it matches the flame lanes.
+  const instHue = (id: string) => model.instances.find((i) => i.id === id)?.colorIndex ?? 0
 
   return (
     <section className="panel stats">
@@ -128,9 +130,7 @@ export default function SpanStats({ model }: SpanStatsProps) {
                     <span className="stats-straggler">
                       <span
                         className="swatch"
-                        style={{
-                          background: instanceColorVar(colorIndexForService(instName(r.straggler))),
-                        }}
+                        style={{ background: instanceColorVar(instHue(r.straggler)) }}
                       />
                       <span className="inst-name" title={instName(r.straggler)}>
                         {instName(r.straggler)}

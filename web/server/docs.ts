@@ -12,7 +12,7 @@ export const CONVENTIONS = {
     'THREE UNITS, never mixed: search ranges (`from`/`to`) are unix SECONDS; trace/span anchors (`startUnixMs`, `spanStartUnixMs`) are epoch MILLISECONDS; every `*Ns` field is NANOSECONDS — and span/event `startNs`/`timeNs` are RELATIVE to the trace `startUnixMs`, not absolute.',
   ids: 'Trace/span ids are lowercase hex in responses; hex or base64 are accepted on input.',
   instances:
-    'An instance is one emitting process (one node). Identity = resource `service.name`, plus `#service.instance.id` when present (e.g. `node-2` or `api#worker-001`). Each node emits its OWN trace, so a fetched trace is one node; to view or aggregate the same span across nodes, use /compare and /compare/aggregate (correlate by span name + attribute). Do not force multiple nodes into one deterministic trace id.',
+    'An instance is one emitting process (one node). Identity = resource `service.name`, plus `#service.instance.id` when present (e.g. `node-2` or `api#worker-001`). Each node emits its OWN trace, so a fetched trace is one node; to view or aggregate the same span across nodes, use /compare and /compare/aggregate (correlate by span name + attribute).',
   dedup:
     'Spans are deduplicated by span id (first occurrence wins; a warning is recorded). Trace search rows are deduplicated by trace id, event search rows by span id + event name.',
   ordering:
@@ -62,10 +62,9 @@ ${routeLines}
 ### Which node was slow on a given operation?
 
 Each node runs the operation in its OWN trace, so correlate them by span name +
-an attribute that pins the operation (e.g. a consensus height). Do not make
-trace id the operation key; Tempo stores and limits data by trace. /compare
-assembles the lanes; /compare/aggregate gives the per-node stats per code path
-directly.
+an attribute that pins the operation (e.g. a consensus height) — the operation
+key is the name + attribute, not the trace id. /compare assembles the lanes;
+/compare/aggregate gives the per-node stats per code path directly.
 
 \`\`\`sh
 # discover the span name + the attribute that identifies one operation

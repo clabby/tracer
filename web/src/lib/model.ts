@@ -79,7 +79,7 @@ export interface Instance {
   id: string
   serviceName: string
   instanceTag: string | null
-  /** Index into the categorical palette (`--instance-N`). */
+  /** Hue (0-359) for this instance's generated color; see colorIndexForService. */
   colorIndex: number
   spanCount: number
   rootSpans: SpanNode[]
@@ -87,17 +87,27 @@ export interface Instance {
   maxDepth: number
 }
 
-export const INSTANCE_COLOR_COUNT = 12
-
-/** CSS color for an instance, cycling through the categorical palette. */
+/**
+ * CSS color for an instance: its hue at the theme's instance saturation and
+ * lightness (`--instance-sat` / `--instance-lum`). The hue is generated, not
+ * drawn from a fixed palette, so any number of instances (50, 500, …) each get
+ * a distinct color, and switching themes recolors via the CSS vars alone.
+ */
 export function instanceColorVar(colorIndex: number): string {
-  return `var(--instance-${colorIndex % INSTANCE_COLOR_COUNT})`
+  return `hsl(${colorIndex} var(--instance-sat) var(--instance-lum))`
 }
 
 /**
- * Stable palette index for a service name (FNV-1a). Every surface that colors
- * a service (search chips, results dots, flamegraph lanes, details) derives
- * the index from the name so colors agree without shared state.
+ * Stable hue (0-359) for a service name — THE single color-derivation function
+ * for instances, used on every surface (search swatches, provider chips,
+ * flamegraph lanes, stats, details) so one instance is one color everywhere,
+ * with no shared state.
+ *
+ * FNV-1a hashes the name, then Knuth's multiplicative hash maps it onto the hue
+ * wheel. The multiply is what spreads near-sequential names (`node-0`, `node-1`,
+ * …) far apart — a plain `% 360` aliases them into a couple of clustered hues
+ * (the "every node is blue or orange" failure). It also degrades gracefully:
+ * arbitrarily many instances stay well distributed.
  */
 export function colorIndexForService(serviceName: string): number {
   let h = 0x811c9dc5
@@ -105,7 +115,8 @@ export function colorIndexForService(serviceName: string): number {
     h ^= serviceName.charCodeAt(i)
     h = Math.imul(h, 0x01000193)
   }
-  return (h >>> 0) % INSTANCE_COLOR_COUNT
+  const mixed = Math.imul(h, 0x9e3779b1) >>> 0 // 2654435761 ≈ 2^32 / φ
+  return Math.floor((mixed / 0x1_0000_0000) * 360)
 }
 
 // ------------------------------------------------------------ trace model --
@@ -217,6 +228,25 @@ export const DEFAULT_FILTER: FilterState = {
   errorsOnly: false,
   rawQuery: '',
   limit: 50,
+}
+
+/**
+ * True when the filter narrows results beyond the default "show all" — any
+ * service, name, level, non-blank attribute, duration bound, errors-only, or
+ * raw query. Drives whether a "clear" affordance is offered. `limit` and
+ * `nameIsRegex` alone don't count: they tune a query, they aren't one.
+ */
+export function isFilterConfigured(filter: FilterState): boolean {
+  return (
+    filter.services.length > 0 ||
+    filter.name.trim() !== '' ||
+    filter.levels.length > 0 ||
+    filter.attrs.some((a) => a.key.trim() !== '') ||
+    filter.minDuration.trim() !== '' ||
+    filter.maxDuration.trim() !== '' ||
+    filter.errorsOnly ||
+    filter.rawQuery.trim() !== ''
+  )
 }
 
 /**
@@ -362,7 +392,9 @@ export interface TraceListProps {
   compareQueries: Readonly<Record<string, string>>
   loading: boolean
   error: string | null
-  onOpen: (traceId: string) => void
+  /** Open a trace. `matchedSpanIds` are the spans the query hit in that trace;
+   *  the view focuses the single match when unambiguous (else the root / nothing). */
+  onOpen: (traceId: string, matchedSpanIds: string[]) => void
   onOpenCompare: (query: string) => void
   /** Open an event result: navigate to its trace with the event focused. */
   onOpenEvent: (event: EventSummary) => void

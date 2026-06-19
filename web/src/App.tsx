@@ -15,6 +15,7 @@ import TraceList from './components/TraceList'
 import { shortId } from './lib/format'
 import {
   DEFAULT_FILTER,
+  isFilterConfigured,
   type EventSummary,
   type FilterState,
   type RangeSelection,
@@ -107,15 +108,26 @@ export default function App() {
 
   // ------------------------------------------------------------- search --
 
-  const [filter, setFilter] = useState<FilterState>(DEFAULT_FILTER)
-  // Mirror of `filter` updated synchronously in the change handler so that a
+  // What the search targets: spans (trace rows) or events (event rows).
+  const [target, setTarget] = useState<SearchTarget>('spans')
+  const targetRef = useRef(target)
+  // Spans and events keep INDEPENDENT filters — a span name + span attributes
+  // are meaningless as an event query, so switching tabs must not carry them
+  // over. The active filter is `filters[target]`.
+  const [filters, setFilters] = useState<Record<SearchTarget, FilterState>>({
+    spans: DEFAULT_FILTER,
+    events: DEFAULT_FILTER,
+  })
+  const filter = filters[target]
+  // Mirror of `filters` updated synchronously in the change handler so that a
   // search fired in the same event as a filter edit (e.g. Enter committing a
   // provider chip then bubbling to the panel's search handler) snapshots the
   // just-edited filter rather than the render-time closure.
-  const filterRef = useRef(filter)
+  const filtersRef = useRef(filters)
   const onFilterChange = useCallback((f: FilterState) => {
-    filterRef.current = f
-    setFilter(f)
+    const next = { ...filtersRef.current, [targetRef.current]: f }
+    filtersRef.current = next
+    setFilters(next)
   }, [])
   const [range, setRange] = useState<RangeSelection>(DEFAULT_RANGE)
   // Mirror of `range` so an Enter-fired search snapshots the just-picked range.
@@ -124,9 +136,6 @@ export default function App() {
     rangeRef.current = r
     setRange(r)
   }, [])
-  // What the search targets: spans (trace rows) or events (event rows).
-  const [target, setTarget] = useState<SearchTarget>('spans')
-  const targetRef = useRef(target)
 
   // Snapshot of (filter, target, range) captured when a search fires; bumping
   // `nonce` is what actually triggers the query. `rangeSel` is retained so a
@@ -148,7 +157,7 @@ export default function App() {
 
   const onSearch = useCallback(() => {
     setSubmitted((prev) => ({
-      filter: filterRef.current,
+      filter: filtersRef.current[targetRef.current],
       target: targetRef.current,
       rangeSel: rangeRef.current,
       range: resolveRange(rangeRef.current, Date.now()),
@@ -156,8 +165,8 @@ export default function App() {
     }))
   }, [])
 
-  // Switching the results tab re-submits the current filter for the new
-  // target right away.
+  // Switching the results tab searches the OTHER target with its own filter
+  // (each tab keeps independent search parameters).
   const onTargetChange = useCallback(
     (t: SearchTarget) => {
       targetRef.current = t
@@ -294,14 +303,22 @@ export default function App() {
   const focusRef = useRef<{
     traceId: string
     services: string[]
+    span?: string
+    focusRoot?: boolean
     event?: { spanId: string; name: string }
   } | null>(null)
 
   const openTrace = useCallback(
-    (id: string) => {
+    (id: string, matchedSpanIds: string[]) => {
+      // Empty query → focus the outermost (root) span. A real query → focus the
+      // span it matched, but ONLY when unambiguous (exactly one match);
+      // multiple matches focus nothing rather than pick arbitrarily.
+      const configured = isFilterConfigured(submitted.filter)
       focusRef.current = {
         traceId: id,
         services: submitted.filter.services,
+        span: configured && matchedSpanIds.length === 1 ? matchedSpanIds[0] : undefined,
+        focusRoot: !configured,
       }
       navigate({ view: 'trace', traceId: id })
     },
@@ -344,6 +361,14 @@ export default function App() {
       const ev = span?.events.find((x) => x.name === name)
       if (ev !== undefined) selectEvent(ev)
       else if (span !== undefined) selectSpan(span.spanId)
+    } else if (focus.span !== undefined) {
+      // Unambiguous match: pre-open that span's details pane.
+      const span = model.spans.get(focus.span)
+      if (span !== undefined) selectSpan(span.spanId)
+    } else if (focus.focusRoot) {
+      // Empty query: focus the outermost span.
+      const root = model.instances[0]?.rootSpans[0]
+      if (root !== undefined) selectSpan(root.spanId)
     }
   }, [model, selectEvent, selectSpan])
 

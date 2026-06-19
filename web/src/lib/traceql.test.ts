@@ -14,8 +14,12 @@ function attr(scope: AttrFilter['scope'], key: string, op: AttrOp, value: string
 }
 
 describe('buildTraceQL', () => {
-  test('empty filter compiles to {}', () => {
-    expect(buildTraceQL(DEFAULT_FILTER)).toBe('{}')
+  test('empty span filter matches only parented spans (drops nameless roots)', () => {
+    expect(buildTraceQL(DEFAULT_FILTER)).toBe('{ nestedSetParent != -1 }')
+  })
+
+  test('empty event filter still just requires an event', () => {
+    expect(buildTraceQL(DEFAULT_FILTER, 'events')).toBe('{ event:name =~ ".+" }')
   })
 
   // ---------------------------------------------------------------- services
@@ -98,8 +102,8 @@ describe('buildTraceQL', () => {
     )
   })
 
-  test('blank name emits no clause', () => {
-    expect(buildTraceQL(filter({ name: '   ' }))).toBe('{}')
+  test('blank name emits no clause (falls back to the show-all span match)', () => {
+    expect(buildTraceQL(filter({ name: '   ' }))).toBe('{ nestedSetParent != -1 }')
   })
 
   // ------------------------------------------------------------------ levels
@@ -156,7 +160,9 @@ describe('buildTraceQL', () => {
   })
 
   test('invalid durations are dropped', () => {
-    expect(buildTraceQL(filter({ minDuration: 'fast', maxDuration: '10 parsecs' }))).toBe('{}')
+    expect(buildTraceQL(filter({ minDuration: 'fast', maxDuration: '10 parsecs' }))).toBe(
+      '{ nestedSetParent != -1 }',
+    )
   })
 
   // ------------------------------------------------------------------- attrs
@@ -236,7 +242,9 @@ describe('buildTraceQL', () => {
   })
 
   test('attrs with empty keys are skipped', () => {
-    expect(buildTraceQL(filter({ attrs: [attr('span', '  ', '=', 'x')] }))).toBe('{}')
+    expect(buildTraceQL(filter({ attrs: [attr('span', '  ', '=', 'x')] }))).toBe(
+      '{ nestedSetParent != -1 }',
+    )
   })
 
   // Keys that are not plain identifiers use TraceQL quoted-attribute syntax.

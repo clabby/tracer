@@ -197,11 +197,16 @@
 /* ---------------------------------------------------------------- footer -- */
 
 .sp-footer {
+  display: flex;
+  gap: var(--pad);
   padding: var(--pad);
   border-top: 1px solid var(--border);
 }
 .sp-search {
-  width: 100%;
+  flex: 1;
+  justify-content: center;
+}
+.sp-clear {
   justify-content: center;
 }
 .sp-search .spinner {

@@ -132,5 +132,11 @@ export function buildTraceQL(filter: FilterState, target: SearchTarget = 'spans'
     }
   }
 
-  return clauses.length === 0 ? '{}' : `{ ${clauses.join(' && ')} }`
+  if (clauses.length > 0) return `{ ${clauses.join(' && ')} }`
+  // "Show all" (no filter present): match only spans that HAVE a parent.
+  // Parentless spans are typically the (often nameless) roots of partial or
+  // degenerate traces; excluding them keeps the default results to real,
+  // named operations. Event searches always carry an `event:name` clause, so
+  // they never reach this branch.
+  return forEvents ? '{}' : '{ nestedSetParent != -1 }'
 }

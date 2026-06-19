@@ -167,7 +167,7 @@ export const ROUTES: RouteDef[] = [
     pattern: '/api/v1/compare',
     operationId: 'compareBySpan',
     summary:
-      'Compare ONE span across nodes by correlating it in each node\'s own trace. Runs the search dialect to locate the matching span (give an exact `name` plus an `attr` that pins the operation, e.g. name=round&nameRegex=false&attr=span.height=42), then assembles each match\'s subtree into one multi-instance trace whose lanes share a time axis anchored at the EARLIEST matched span, so each node\'s start skew is visible. With target=events, the event search locates matching events and assembles their owning spans. Do not force multiple nodes into one deterministic trace id; compare expects one matching span per node trace. The response is the same shape as GET /traces/:id, so the flame/stats/heatmap views render it directly.',
+      'Compare ONE span across nodes by correlating it in each node\'s own trace. Runs the search dialect to locate the matching span (give an exact `name` plus an `attr` that pins the operation, e.g. name=round&nameRegex=false&attr=span.height=42), then assembles each match\'s subtree into one multi-instance trace whose lanes share a time axis anchored at the EARLIEST matched span, so each node\'s start skew is visible. With target=events, the event search locates matching events and assembles their owning spans. Expects one matching span per node trace. The response is the same shape as GET /traces/:id, so the flame/stats/heatmap views render it directly.',
     params: COMPARE_QUERY_PARAMS,
     responseSchema: 'wireTraceSchema',
     example:
@@ -179,7 +179,7 @@ export const ROUTES: RouteDef[] = [
     pattern: '/api/v1/compare/aggregate',
     operationId: 'compareAggregate',
     summary:
-      'The merged ("aggregate") flame tree of a comparison: the same span correlated across nodes (search dialect, e.g. name=round&nameRegex=false&attr=span.height=42), assembled and grouped by name-path with per-instance duration/error stats. This is for separate per-node traces, not deterministic shared trace ids. The cross-node code-path view — compare the same path across every node without downloading spans.',
+      'The merged ("aggregate") flame tree of a comparison: the same span correlated across nodes (search dialect, e.g. name=round&nameRegex=false&attr=span.height=42), assembled and grouped by name-path with per-instance duration/error stats. The cross-node code-path view — compare the same path across every node without downloading spans.',
     params: [
       ...SEARCH_QUERY_PARAMS,
       {

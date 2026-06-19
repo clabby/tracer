@@ -1,9 +1,27 @@
 import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faArrowsRotate } from '@fortawesome/free-solid-svg-icons'
 import type { EventSummary, TraceListProps, TraceSummary } from '../lib/model'
 import { colorIndexForService, eventSummaryKey, instanceColorVar } from '../lib/model'
+
+/** Cursor-anchored swatch tooltip, styled like the flamegraph hover tooltip. */
+type Tip = { name: string; x: number; y: number }
+type OnTip = (tip: Tip | null) => void
+
+/** A service swatch that reveals the instance name on hover. */
+function Swatch({ name, onTip }: { name: string; onTip: OnTip }) {
+  return (
+    <span
+      className="swatch tl-swatch"
+      style={{ background: instanceColorVar(colorIndexForService(name)) }}
+      onMouseEnter={(e) => onTip({ name, x: e.clientX, y: e.clientY })}
+      onMouseMove={(e) => onTip({ name, x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => onTip(null)}
+    />
+  )
+}
 import {
   formatAgo,
   formatClock,
@@ -16,22 +34,20 @@ import './TraceList.css'
 
 const MAX_SWATCHES = 4
 
-function ServicesCell({ services }: { services: string[] }) {
+function ServicesCell({ services, onTip }: { services: string[]; onTip: OnTip }) {
   const sorted = [...services].sort((a, b) =>
     a.localeCompare(b, undefined, { numeric: true }),
   )
   const shown = sorted.slice(0, MAX_SWATCHES)
   return (
-    <span className="tl-services" title={sorted.join(', ')}>
+    <span className="tl-services">
       {shown.map((s) => (
-        <span
-          key={s}
-          className="swatch"
-          style={{ background: instanceColorVar(colorIndexForService(s)) }}
-        />
+        <Swatch key={s} name={s} onTip={onTip} />
       ))}
       {sorted.length > MAX_SWATCHES && (
-        <span className="tl-more faint">+{sorted.length - MAX_SWATCHES}</span>
+        <span className="tl-more faint" title={sorted.slice(MAX_SWATCHES).join(', ')}>
+          +{sorted.length - MAX_SWATCHES}
+        </span>
       )}
     </span>
   )
@@ -58,12 +74,19 @@ function Row({
   onClick,
   maxMs,
   traceLabel,
+  onTip,
 }: {
   trace: TraceSummary
   onClick: () => void
   maxMs: number
   traceLabel?: string
+  onTip: OnTip
 }) {
+  // Tempo sometimes omits rootTraceName (incomplete/rootless trace). Fall back
+  // to the matched span name so the row is never nameless; "→ matched" only
+  // shows when it adds something beyond the primary label.
+  const matched = trace.matchedSpanNames.length > 0 ? matchedSummary(trace.matchedSpanNames) : ''
+  const primary = trace.rootTraceName || matched
   return (
     <tr onClick={onClick}>
       <td
@@ -73,16 +96,21 @@ function Row({
         {traceLabel ?? shortId(trace.traceId)}
       </td>
       <td className="tl-name">
-        {trace.rootTraceName}
-        {trace.matchedSpanNames.length > 0 &&
-          matchedSummary(trace.matchedSpanNames) !== trace.rootTraceName && (
-            <span
-              className="tl-matched faint"
-              title={`spans matched by the query: ${matchedSummary(trace.matchedSpanNames)}`}
-            >
-              → {matchedSummary(trace.matchedSpanNames)}
-            </span>
-          )}
+        {primary === '' ? (
+          <span className="faint">unnamed</span>
+        ) : (
+          <>
+            {primary}
+            {matched !== '' && matched !== primary && (
+              <span
+                className="tl-matched faint"
+                title={`spans matched by the query: ${matched}`}
+              >
+                → {matched}
+              </span>
+            )}
+          </>
+        )}
       </td>
       <td className="tl-start" title={formatDateTime(trace.startUnixMs)}>
         <span className="mono-num">{formatClock(trace.startUnixMs)}</span>
@@ -97,7 +125,7 @@ function Row({
       </td>
       <td className="tl-num mono-num">{trace.spanCount}</td>
       <td>
-        <ServicesCell services={trace.services} />
+        <ServicesCell services={trace.services} onTip={onTip} />
       </td>
     </tr>
   )
@@ -107,10 +135,12 @@ function EventRow({
   event,
   onClick,
   traceLabel,
+  onTip,
 }: {
   event: EventSummary
   onClick: () => void
   traceLabel?: string
+  onTip: OnTip
 }) {
   return (
     <tr onClick={onClick}>
@@ -125,14 +155,7 @@ function EventRow({
       <td>
         <span className="tl-service-cell">
           {/* A compare row spans several services; one swatch would misrepresent it. */}
-          {traceLabel === undefined && (
-            <span
-              className="swatch"
-              style={{
-                background: instanceColorVar(colorIndexForService(event.serviceName)),
-              }}
-            />
-          )}
+          {traceLabel === undefined && <Swatch name={event.serviceName} onTip={onTip} />}
           <span className="inst-name" title={event.serviceName}>
             {event.serviceName}
           </span>
@@ -177,6 +200,7 @@ export default function TraceList({
   const hasRows = forEvents ? events !== null : results !== null
 
   const [order, setOrder] = useState<SortOrder>('recent')
+  const [tip, setTip] = useState<Tip | null>(null)
   const count = forEvents ? events?.length : results?.length
   const maxMs = useMemo(
     () => (results ? Math.max(1, ...results.map((t) => t.durationMs)) : 1),
@@ -230,6 +254,7 @@ export default function TraceList({
                 key={eventSummaryKey(e)}
                 event={e}
                 traceLabel={compareQueries[e.traceId] === undefined ? undefined : 'compare'}
+                onTip={setTip}
                 onClick={
                   compareQueries[e.traceId] === undefined
                     ? () => onOpenEvent(e)
@@ -261,9 +286,10 @@ export default function TraceList({
                 key={t.traceId}
                 trace={t}
                 traceLabel={compareQueries[t.traceId] === undefined ? undefined : 'compare'}
+                onTip={setTip}
                 onClick={
                   compareQueries[t.traceId] === undefined
-                    ? () => onOpen(t.traceId)
+                    ? () => onOpen(t.traceId, t.matchedSpanIds)
                     : () => onOpenCompare(compareQueries[t.traceId])
                 }
                 maxMs={maxMs}
@@ -340,6 +366,24 @@ export default function TraceList({
         </span>
       </div>
       {body}
+      {tip &&
+        createPortal(
+          <div
+            className="tl-tip"
+            style={{
+              // Clamp near the viewport edge (the services column hugs the right).
+              left: Math.min(tip.x + 14, window.innerWidth - 12 * tip.name.length - 48),
+              top: Math.min(tip.y + 14, window.innerHeight - 40),
+            }}
+          >
+            <span
+              className="swatch"
+              style={{ background: instanceColorVar(colorIndexForService(tip.name)) }}
+            />
+            {tip.name}
+          </div>,
+          document.body,
+        )}
     </section>
   )
 }

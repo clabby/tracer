@@ -27,7 +27,6 @@ import {
 } from 'react'
 import { clamp, formatClock, formatNs } from '../lib/format'
 import {
-  INSTANCE_COLOR_COUNT,
   instanceColorVar,
   type AggregateNode,
   type FlameGraphProps,
@@ -44,6 +43,10 @@ import './FlameGraph.css'
 
 const RULER_H = 26
 const ROW_H = 20
+// A canvas can't grow past the browser's max backing-store dimension (~16384px
+// on Chrome/Safari); exceed it and the 2D context enters a permanent error
+// state (every draw call throws). Cap rendered lanes to a safe height instead.
+const MAX_CANVAS_PX = 16384
 const BAR_H = 16
 const BAR_PAD_Y = (ROW_H - BAR_H) / 2 // vertical inset, centers the bar in its row
 const CELL_GAP = 2 // horizontal gap carved from each bar's right edge
@@ -61,6 +64,15 @@ const FILL_ALPHA_MAX = 0.95
 
 // ----------------------------------------------------------------- types --
 
+interface InstanceColor {
+  /** Solid base color (the lane dot / minimap fill / cell border source). */
+  base: string
+  /** Translucent tint fills, indexed by depth-shade level. */
+  fills: string[]
+  /** Cell border: a lighter tint of the base, like a .btn edge. */
+  border: string
+}
+
 interface Theme {
   bg: string
   flameBg: string
@@ -73,16 +85,26 @@ interface Theme {
   error: string
   /** Level → color, for event markers and badges. */
   levels: Record<Level, string>
-  instances: string[]
-  /** Per-instance translucent tint fills, indexed by depth-shade level. */
-  fills: string[][]
-  /** Per-instance cell border: the vivid base color (lighter than the fill,
-      like a .btn edge over its dark surface). */
-  borders: string[]
+  /** Instance saturation/lightness (%), from --instance-sat/-lum per theme. */
+  sat: number
+  lum: number
+  /** Memoized hue → derived colors, so a frame never recomputes per span. */
+  colorCache: Map<number, InstanceColor>
   font: string
   fontSmall: string
   charW: number
   charWSmall: number
+}
+
+/** Derive (and cache) an instance's colors from its hue at the theme's S/L. */
+function instanceColor(theme: Theme, hue: number): InstanceColor {
+  let c = theme.colorCache.get(hue)
+  if (c === undefined) {
+    const base = hslCss(hue, theme.sat, theme.lum)
+    c = { base, fills: alphaRamp(base), border: lighten(base, 0.4) }
+    theme.colorCache.set(hue, c)
+  }
+  return c
 }
 
 interface View {
@@ -182,6 +204,26 @@ interface Active {
   hi: number
   focused: boolean
   lanes: ActiveLane[]
+  /** Lanes dropped to keep the canvas within MAX_CANVAS_PX (0 = all shown). */
+  dropped: number
+}
+
+/**
+ * Keep only the lanes whose stacked rows fit a safe canvas height. A comparison
+ * can assemble hundreds of instances; rendering them all would overflow the
+ * canvas backing store and crash the context. The remainder is reported so the
+ * UI can show a "narrow the filter" notice (hiding visible instances reveals the
+ * dropped ones, so every lane stays reachable).
+ */
+function capLanes(lanes: ActiveLane[]): { lanes: ActiveLane[]; dropped: number } {
+  const dpr = window.devicePixelRatio || 1
+  const maxRows = Math.max(1, Math.floor((MAX_CANVAS_PX / dpr - RULER_H - 10) / ROW_H))
+  let rows = 0
+  for (let i = 0; i < lanes.length; i++) {
+    rows += lanes[i].maxDepth + 1 + LANE_GAP_ROWS
+    if (rows > maxRows && i > 0) return { lanes: lanes.slice(0, i), dropped: lanes.length - i }
+  }
+  return { lanes, dropped: 0 }
 }
 
 // --------------------------------------------------------- color helpers --
@@ -215,6 +257,26 @@ function lighten(color: string, t: number): string {
   return `rgb(${Math.round(r + (255 - r) * t)}, ${Math.round(g + (255 - g) * t)}, ${Math.round(b + (255 - b) * t)})`
 }
 
+/** HSL (hue in degrees, s/l in %) → `rgb(r, g, b)`, matching CSS hsl() so the
+ *  canvas fills agree with the inline-style swatches built by instanceColorVar. */
+function hslCss(h: number, s: number, l: number): string {
+  const sn = s / 100
+  const ln = l / 100
+  const c = (1 - Math.abs(2 * ln - 1)) * sn
+  const hp = (((h % 360) + 360) % 360) / 60
+  const x = c * (1 - Math.abs((hp % 2) - 1))
+  const [r1, g1, b1] =
+    hp < 1 ? [c, x, 0]
+    : hp < 2 ? [x, c, 0]
+    : hp < 3 ? [0, c, x]
+    : hp < 4 ? [0, x, c]
+    : hp < 5 ? [x, 0, c]
+    : [c, 0, x]
+  const m = ln - c / 2
+  const to = (n: number) => Math.round((n + m) * 255)
+  return `rgb(${to(r1)}, ${to(g1)}, ${to(b1)})`
+}
+
 /**
  * Build the per-depth fill ramp for one instance color: the base hue at near-
  * full opacity, nudged slightly more opaque with depth. The border uses a
@@ -236,10 +298,7 @@ function resolveTheme(): Theme {
   const v = (name: string, fallback: string) =>
     cs.getPropertyValue(name).trim() || fallback
   const mono = v('--font-mono', 'monospace')
-  const instances: string[] = []
-  for (let i = 0; i < INSTANCE_COLOR_COUNT; i++) {
-    instances.push(v(`--instance-${i}`, '#7b87f7'))
-  }
+  const num = (name: string, fallback: number) => parseFloat(v(name, String(fallback))) || fallback
   const flameBg = v('--flame-bg', '#121217')
   return {
     bg: v('--bg', '#0e0e12'),
@@ -258,9 +317,9 @@ function resolveTheme(): Theme {
       warn: v('--level-warn', '#e0a458'),
       error: v('--level-error', '#e0635c'),
     },
-    instances,
-    fills: instances.map((c) => alphaRamp(c)),
-    borders: instances.map((c) => lighten(c, 0.4)),
+    sat: num('--instance-sat', 72),
+    lum: num('--instance-lum', 70),
+    colorCache: new Map(),
     font: `11px ${mono}`,
     fontSmall: `10px ${mono}`,
     charW: 0,
@@ -423,8 +482,6 @@ export default function FlameGraph(props: FlameGraphProps) {
   const [laneSort, setLaneSort] = useState<LaneSort>('order')
   // Self-time heat: color bars by exclusive (self) duration instead of instance.
   const [selfTime, setSelfTime] = useState(false)
-  // Wait-gaps: shade the parts of a parent span not covered by its children.
-  const [gaps, setGaps] = useState(false)
 
   const hideTip = useCallback(() => {
     if (tipRef.current !== null) {
@@ -546,20 +603,20 @@ export default function FlameGraph(props: FlameGraphProps) {
    */
   const active = useMemo<Active>(() => {
     const fullHi = Math.max(1, model.durationNs)
-    const buildFull = (): Active => ({
-      lo: 0,
-      hi: fullHi,
-      focused: false,
-      lanes: sortLanes(
-        model.instances
-          .filter((i) => !hiddenInstances.has(i.id))
-          .map((inst) => {
-            const packed = packRows(inst.rootSpans)
-            return { inst, spans: packed.spans, maxDepth: packed.maxRow }
-          }),
-        laneSort,
-      ),
-    })
+    const buildFull = (): Active => {
+      const capped = capLanes(
+        sortLanes(
+          model.instances
+            .filter((i) => !hiddenInstances.has(i.id))
+            .map((inst) => {
+              const packed = packRows(inst.rootSpans)
+              return { inst, spans: packed.spans, maxDepth: packed.maxRow }
+            }),
+          laneSort,
+        ),
+      )
+      return { lo: 0, hi: fullHi, focused: false, lanes: capped.lanes, dropped: capped.dropped }
+    }
     if (focusName === null) return buildFull()
 
     let lo = Infinity
@@ -582,7 +639,8 @@ export default function FlameGraph(props: FlameGraphProps) {
       if (packed.hi > hi) hi = packed.hi
     }
     if (lanes.length === 0 || lo === Infinity) return buildFull()
-    return { lo, hi: Math.max(hi, lo + 1), focused: true, lanes: sortLanes(lanes, laneSort) }
+    const capped = capLanes(sortLanes(lanes, laneSort))
+    return { lo, hi: Math.max(hi, lo + 1), focused: true, lanes: capped.lanes, dropped: capped.dropped }
   }, [model, focusName, hiddenInstances, laneSort])
 
   // Zoom/timeline extent: focus subtree in 'instances' mode, else full domain.
@@ -629,8 +687,10 @@ export default function FlameGraph(props: FlameGraphProps) {
     const cssW = Math.max(80, scroll.clientWidth)
     const cssH = Math.max(140, RULER_H + totalRows * ROW_H + 10)
     const dpr = window.devicePixelRatio || 1
-    const pw = Math.round(cssW * dpr)
-    const ph = Math.round(cssH * dpr)
+    // Lanes are already capped to fit, so the clamp is a no-op in practice — it
+    // only guards a pathological single very-deep lane from poisoning the context.
+    const pw = Math.min(MAX_CANVAS_PX, Math.round(cssW * dpr))
+    const ph = Math.min(MAX_CANVAS_PX, Math.round(cssH * dpr))
     if (canvas.width !== pw || canvas.height !== ph) {
       canvas.width = pw
       canvas.height = ph
@@ -706,10 +766,10 @@ export default function FlameGraph(props: FlameGraphProps) {
         const { inst } = lane
         const laneTop = RULER_H + lane.startRow * ROW_H
         const laneH = lane.rowCount * ROW_H
-        const ci = inst.colorIndex % INSTANCE_COLOR_COUNT
+        const color = instanceColor(theme, inst.colorIndex)
 
         // Gutter: color stripe + instance name (+ span count).
-        ctx.fillStyle = theme.instances[ci]
+        ctx.fillStyle = color.base
         ctx.fillRect(0, laneTop + 2, 3, laneH - 4)
         ctx.font = theme.font
         ctx.fillStyle = theme.textMuted
@@ -735,8 +795,8 @@ export default function FlameGraph(props: FlameGraphProps) {
         ctx.lineTo(cssW, laneTop + laneH + ROW_H / 2 + 0.5)
         ctx.stroke()
 
-        const ramp = theme.fills[ci]
-        const borderC = theme.borders[ci]
+        const ramp = color.fills
+        const borderC = color.border
         ctx.font = theme.font
         for (const { span, depth } of lane.spans) {
           const sx0 = toX(span.startNs)
@@ -792,26 +852,6 @@ export default function FlameGraph(props: FlameGraphProps) {
               }
               if (cursor < end) seg(cursor, end, selfOverlay)
             }
-          }
-          // Wait-gaps: darken the parent's extent not covered by any child —
-          // where it's doing its own work or blocked waiting.
-          if (gaps && span.children.length > 0) {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.34)'
-            const end = span.startNs + span.durationNs
-            const ivs = span.children
-              .map((c) => [c.startNs, c.startNs + c.durationNs] as [number, number])
-              .sort((a, b) => a[0] - b[0])
-            let cursor = span.startNs
-            const shade = (g0: number, g1: number) => {
-              const gx0 = Math.max(toX(g0), x0)
-              const gx1 = Math.min(toX(g1), x0 + w)
-              if (gx1 - gx0 > 0.5) ctx.fillRect(gx0, y, gx1 - gx0, BAR_H)
-            }
-            for (const [s, e] of ivs) {
-              if (s > cursor) shade(cursor, s)
-              if (e > cursor) cursor = e
-            }
-            if (cursor < end) shade(cursor, end)
           }
           if (isError) {
             ctx.fillStyle = theme.error
@@ -917,13 +957,13 @@ export default function FlameGraph(props: FlameGraphProps) {
           const x0 = Math.max(sx0, plotX0)
           const x1 = Math.min(sx1, cssW)
           const w = Math.max(x1 - x0 - CELL_GAP, 1)
-          const ci = seg.colorIndex % INSTANCE_COLOR_COUNT
+          const color = instanceColor(theme, seg.colorIndex)
 
           pathRoundRect(ctx, x0, y, w, BAR_H, CELL_RADIUS)
-          ctx.fillStyle = theme.fills[ci][shade]
+          ctx.fillStyle = color.fills[shade]
           ctx.fill()
           if (w >= 3) {
-            ctx.strokeStyle = theme.borders[ci]
+            ctx.strokeStyle = color.border
             ctx.stroke()
           }
           if (seg.hasError) {
@@ -1020,10 +1060,9 @@ export default function FlameGraph(props: FlameGraphProps) {
     const laneH = cssH / (lanes.length || 1)
     const gap = lanes.length > 1 ? 2 : 0
     lanes.forEach((al, li) => {
-      const ci = al.inst.colorIndex % INSTANCE_COLOR_COUNT
       const laneTop = li * laneH
       const h = Math.max(laneH - gap, 2)
-      ctx.fillStyle = theme.instances[ci]
+      ctx.fillStyle = instanceColor(theme, al.inst.colorIndex).base
       for (const { span: s } of al.spans) {
         const x = ((s.startNs - lo) / span) * cssW
         const w = Math.max((s.durationNs / span) * cssW, 1)
@@ -1099,7 +1138,7 @@ export default function FlameGraph(props: FlameGraphProps) {
   // Repaint on any canvas-relevant input change.
   useLayoutEffect(() => {
     schedule()
-  }, [schedule, model, mode, selectedSpanId, hiddenInstances, showEvents, focusName, highlight, active, selfTime, gaps])
+  }, [schedule, model, mode, selectedSpanId, hiddenInstances, showEvents, focusName, highlight, active, selfTime])
 
   // Invalidate cached colors when the theme attribute flips.
   useEffect(() => {
@@ -1406,6 +1445,14 @@ export default function FlameGraph(props: FlameGraphProps) {
           {shownSpans} spans
           <span className="fg-header-dot">·</span>
           {shownInstances} {shownInstances === 1 ? 'instance' : 'instances'}
+          {active.dropped > 0 && (
+            <span
+              className="fg-cap-note level-warn"
+              title="Too many lanes to render at once. Narrow the filter (e.g. pin one height) to compare fewer instances; hiding visible instances reveals the rest."
+            >
+              <span className="fg-header-dot">·</span>+{active.dropped} not shown
+            </span>
+          )}
         </span>
       </div>
       <div className="fg-legend">
@@ -1501,15 +1548,6 @@ export default function FlameGraph(props: FlameGraphProps) {
             onClick={() => setSelfTime((v) => !v)}
           >
             self-time
-          </button>
-          <button
-            type="button"
-            className={`chip fg-chip${gaps ? ' active' : ''}`}
-            aria-pressed={gaps}
-            title="shade the parts of a span not covered by its children (self/wait)"
-            onClick={() => setGaps((v) => !v)}
-          >
-            gaps
           </button>
         </div>
       )}

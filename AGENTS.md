@@ -84,8 +84,9 @@ docker/demo/          demo stack: compose, tempo.yaml, loadgen/ (consensus-sim)
   a runnable example. Non-2xx responses are `application/problem+json`.
 - **Colors come from `web/src/styles/tokens.css` only** — never hardcode. Canvas
   code reads resolved values via `getComputedStyle` (re-read on theme change).
-  Instances use `--instance-0..11` (`instanceColorVar(colorIndex)`); levels use
-  `--level-{name}`.
+  Instance colors are generated per service name (`colorIndexForService` →
+  `instanceColorVar` → an `hsl()` hue at the theme's `--instance-sat`/
+  `--instance-lum`); levels use `--level-{name}`.
 - **No new runtime deps** beyond package.json / Cargo.toml without strong reason.
   No UI component libraries; no virtualization deps. The server has ZERO runtime
   deps (`json-schema-to-ts` is type-only).

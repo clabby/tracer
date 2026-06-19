@@ -429,7 +429,7 @@ export function parseTrace(raw: unknown, traceId: string): TraceModel {
     }
   }
 
-  // ---- pass 5: assemble instances (natural sort; color from name hash) ----
+  // ---- pass 5: assemble instances (natural sort; color from name) ----
   const metas = [...instanceMeta.values()].sort(
     (a, b) => naturalCompare(a.serviceName, b.serviceName) || naturalCompare(a.id, b.id),
   )
@@ -546,33 +546,42 @@ export function buildAggregateTree(model: TraceModel, hidden: ReadonlySet<string
 
 /**
  * Assemble per-node span matches into one synthetic multi-instance trace for
- * side-by-side comparison. The shared time axis is anchored at the EARLIEST
- * matched span across all nodes; each lane is then offset by that node's real
- * skew, so a node that entered the operation late renders shifted right rather
- * than left-aligned. Span ids are prefixed with the instance id so ids drawn
- * from separate source traces never collide. The result is a normal
- * `TraceModel` that the flame, stats, and heatmap views render directly.
+ * side-by-side comparison. Matches are grouped BY PROVIDER (`instance.id`): each
+ * provider gets exactly ONE lane holding every subtree it matched, so comparing
+ * by a non-pinning attribute (e.g. role=leader across many rounds) yields one
+ * lane per node — not one lane per matched trace.
+ *
+ * The shared time axis is anchored at the EARLIEST matched span across all
+ * nodes; each subtree is then offset by its real skew, so a node that entered
+ * late renders shifted right rather than left-aligned. Within a lane, the
+ * non-overlapping subtrees pack onto the same rows (the flame packer handles
+ * the layout). Span ids are prefixed per-match so ids drawn from separate
+ * source traces never collide. The result is a normal `TraceModel` that the
+ * flame, stats, and heatmap views render directly.
  *
  * Inter-lane offsets pass through the millisecond-domain `startUnixMs`, so skew
  * is accurate to well under a microsecond (within-lane offsets stay exact).
- *
- * Callers must pass matches whose `instance.id`s are unique; the prefix relies
- * on it to keep span ids globally distinct.
  */
 export function assembleComparison(matches: SpanMatch[], traceId: string): TraceModel {
   const spans = new Map<string, SpanNode>()
   const events: SpanEvent[] = []
-  const instances: Instance[] = []
   let durationNs = 0
 
   // Absolute start of a match's root (epoch ms) and the shared origin.
   const absMs = (m: SpanMatch): number => m.startUnixMs + m.root.startNs / 1e6
   const originMs = matches.reduce((min, m) => Math.min(min, absMs(m)), Infinity)
 
-  for (const match of matches) {
+  // One lane per provider; same-provider matches accumulate into its rootSpans.
+  const lanes = new Map<
+    string,
+    { instance: Instance; rootSpans: SpanNode[]; spanCount: number; maxDepth: number }
+  >()
+
+  matches.forEach((match, idx) => {
     const { instance, root } = match
-    const instanceId = instance.id
-    const prefix = (id: string): string => `${instanceId}::${id}`
+    // Index-prefixed so two matches from the same provider (or identical span
+    // ids across separate traces) never collide in the shared span map.
+    const prefix = (id: string): string => `${idx}::${id}`
     const baseDepth = root.depth
     const laneOffsetNs = Math.round((absMs(match) - originMs) * 1e6)
     // Map a source time (relative to the node's own trace) onto the shared axis.
@@ -602,12 +611,12 @@ export function assembleComparison(matches: SpanMatch[], traceId: string): Trace
         spanId: prefix(n.spanId),
         parentSpanId: isRoot || n.parentSpanId === null ? null : prefix(n.parentSpanId),
         startNs,
-        instanceId,
+        instanceId: instance.id,
         depth,
         events: n.events.map((e) => ({
           ...e,
           spanId: prefix(e.spanId),
-          instanceId,
+          instanceId: instance.id,
           timeNs: reb(e.timeNs),
         })),
         children: [],
@@ -625,17 +634,31 @@ export function assembleComparison(matches: SpanMatch[], traceId: string): Trace
     for (const node of cloned.values()) node.children.sort((a, b) => a.startNs - b.startNs)
 
     const clonedRoot = cloned.get(prefix(root.spanId))
-    if (clonedRoot === undefined) continue
-    instances.push({
-      id: instanceId,
-      serviceName: instance.serviceName,
-      instanceTag: instance.instanceTag,
-      colorIndex: instance.colorIndex,
-      spanCount: subtree.length,
-      rootSpans: [clonedRoot],
-      maxDepth,
-    })
-  }
+    if (clonedRoot === undefined) return
+    const lane = lanes.get(instance.id)
+    if (lane === undefined) {
+      lanes.set(instance.id, {
+        instance,
+        rootSpans: [clonedRoot],
+        spanCount: subtree.length,
+        maxDepth,
+      })
+    } else {
+      lane.rootSpans.push(clonedRoot)
+      lane.spanCount += subtree.length
+      lane.maxDepth = Math.max(lane.maxDepth, maxDepth)
+    }
+  })
+
+  const instances: Instance[] = [...lanes.values()].map((lane) => ({
+    id: lane.instance.id,
+    serviceName: lane.instance.serviceName,
+    instanceTag: lane.instance.instanceTag,
+    colorIndex: lane.instance.colorIndex,
+    spanCount: lane.spanCount,
+    rootSpans: lane.rootSpans.sort((a, b) => a.startNs - b.startNs),
+    maxDepth: lane.maxDepth,
+  }))
 
   events.sort((a, b) => a.timeNs - b.timeNs)
   instances.sort(

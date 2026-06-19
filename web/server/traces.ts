@@ -214,7 +214,6 @@ async function assembleTargets(
   const loaded = await loadTargets(targets, deps)
   const matches: SpanMatch[] = []
   const warnings: string[] = []
-  const usedIds = new Set<string>()
   for (const entry of loaded) {
     if ('err' in entry) {
       warnings.push(`trace ${entry.t.traceId}: ${entry.err}`)
@@ -226,19 +225,17 @@ async function assembleTargets(
     })
     if (roots.length > 1) {
       warnings.push(
-        `trace ${entry.t.traceId}: compare expects one matching span per node trace; found ${roots.length}. Do not force multiple nodes into one trace id.`,
+        `trace ${entry.t.traceId}: ${roots.length} spans matched; compare correlates one matching span per node trace, so this trace was skipped.`,
       )
       continue
     }
     const root = roots[0]
     if (root === undefined) continue
+    // Keep the real provider id; assembleComparison groups same-provider matches
+    // into one lane (a node leading many rounds → a single node lane).
     const instance = entry.model.instances.find((i) => i.id === root.instanceId)
     if (instance === undefined) continue
-    // Two node traces reporting the same instance id (identical service.name)
-    // would collide on assembly; disambiguate the second one by trace id.
-    const id = usedIds.has(instance.id) ? `${instance.id}#${entry.t.traceId.slice(0, 6)}` : instance.id
-    usedIds.add(id)
-    matches.push({ instance: { ...instance, id }, root, startUnixMs: entry.model.startUnixMs })
+    matches.push({ instance, root, startUnixMs: entry.model.startUnixMs })
   }
 
   const model = assembleComparison(matches, COMPARE_TRACE_ID)

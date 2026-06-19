@@ -278,9 +278,9 @@ describe('handleCompare', () => {
     expect(rootOf('node-1').startNs).toBe(0)
     expect(rootOf('node-2').startNs).toBe(2_000_000)
 
-    // Ids are instance-prefixed (the two source traces both used cccc...0001/2).
-    expect(body.spans.some((s) => s.spanId.startsWith('node-1::'))).toBe(true)
-    expect(body.spans.some((s) => s.spanId.startsWith('node-2::'))).toBe(true)
+    // Ids are prefixed per-match so the two source traces' identical ids never collide.
+    expect(rootOf('node-1').spanId).not.toBe(rootOf('node-2').spanId)
+    expect(new Set(body.spans.map((s) => s.spanId)).size).toBe(body.spans.length)
     // process roots are dropped; only each view subtree (view + vote) survives.
     expect(body.spans.map((s) => s.name).sort()).toEqual([
       'round',
@@ -335,7 +335,7 @@ describe('handleCompare', () => {
       'name=round&nameRegex=false&attr=span.height%3D42&from=1749571100&to=1749571300',
     )
     expect(body.instances).toEqual([])
-    expect(body.warnings.some((w) => w.includes('Do not force multiple nodes into one trace id'))).toBe(true)
+    expect(body.warnings.some((w) => w.includes('correlates one matching span per node trace'))).toBe(true)
   })
 
   test('compare/aggregate gives per-node code-path stats over the assembly', async () => {
@@ -351,8 +351,9 @@ describe('handleCompare', () => {
     expect(view.count).toBe(2)
     expect(view.perInstance['node-1'].maxNs).toBe(400_000)
     expect(view.perInstance['node-2'].maxNs).toBe(600_000)
-    // spanIds=true surfaces the prefixed matched ids
-    expect(view.spanIds!['node-1']).toEqual(['node-1::cccccccccccc0001'])
+    // spanIds=true surfaces the prefixed matched ids (one per node, prefix per match)
+    expect(view.spanIds!['node-1']).toHaveLength(1)
+    expect(view.spanIds!['node-1'][0].endsWith('cccccccccccc0001')).toBe(true)
     // vote rides under the view in the merged tree
     const vote = body.nodes.find((n) => n.name === 'vote')!
     expect(vote.path).toEqual(['round', 'vote'])

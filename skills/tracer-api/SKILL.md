@@ -10,9 +10,7 @@ a typed REST API for distributed systems where many nodes run the SAME system
 and EACH node emits its OWN trace. To view or compare one logical operation
 across nodes, correlate the matching span across their separate traces by span
 name + an attribute that pins the operation (e.g. a consensus view) with
-`/compare` and `/compare/aggregate`. Do not force multiple nodes to reuse one
-deterministic trace ID; trace IDs are trace identity, not the cross-node
-comparison key.
+`/compare` and `/compare/aggregate`.
 
 `$BASE` below is the deployment origin, e.g. `http://localhost:8080`.
 
@@ -91,7 +89,7 @@ is one operation to compare across nodes.
 
 **3. Analyze with a script, not by eyeballing JSON.** Loop the operation values
 through `/compare/aggregate?name=<span>&nameRegex=false&attr=span.<attr>=<value>`
-(a few KB each; the server caches per-node parses, concurrent calls are fine).
+(a few KB each; concurrent calls are fine).
 Per-instance duration for one operation = `perInstance[id].maxNs` on the
 depth-0 node. Then aggregate ACROSS operations: mean / median / p95 / max per
 instance, deltas between an instance and the rest, error counts. Tail latency =
@@ -113,8 +111,8 @@ trace. Both endpoints take the search dialect; give an exact `name`
 to correlate on (400).
 
 - `/compare` returns the SAME shape as `/traces/:id` (a multi-instance wire
-  trace, one lane per node, aligned on the earliest match's start and
-  id-prefixed) — analyze or render it exactly like a fetched trace.
+  trace, one lane per node, aligned on the earliest match's start) — analyze or
+  render it exactly like a fetched trace.
 - `/compare/aggregate` returns the merged flame: nodes per `path[]` with
   `perInstance[id]` duration/error stats (add `spanIds=true` for the matching
   span ids). Prefer it for "who is slow on which path" — a few KB, no spans.
@@ -154,8 +152,6 @@ node, link its trace: `$BASE/#/trace/<traceId>`.
   already did the cross-node join.
 - Don't expect multiple nodes in one trace — each node emits its own; cross-node
   analysis goes through `/compare`.
-- Don't use a deterministic shared trace ID as the operation identifier; use an
-  exact span name plus a span attribute such as `height`.
 - Don't mix the time units; don't pass milliseconds to `from`/`to`.
 - Don't hardcode workload span names (`round`, `commit`, …) in reusable
   tooling — discover names via search results or `/compare/aggregate` paths.

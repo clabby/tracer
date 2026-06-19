@@ -65,19 +65,11 @@
   --level-warn: #e0a458;
   --level-error: #e0635c;
 
-  /* Categorical palette for instances (nodes). Pastel, distinguishable. */
-  --instance-0: #7b87f7;
-  --instance-1: #4fb6a2;
-  --instance-2: #e0a458;
-  --instance-3: #d976b6;
-  --instance-4: #6faee8;
-  --instance-5: #9a8ff2;
-  --instance-6: #8fbf6f;
-  --instance-7: #e08a7a;
-  --instance-8: #5fc4ce;
-  --instance-9: #c9a2f5;
-  --instance-10: #c9c46a;
-  --instance-11: #7a9be0;
+  /* Instance colors are generated: hue from the service name (see
+     colorIndexForService), saturation + lightness from here. Bright pastels so
+     they pop on the dark surfaces. */
+  --instance-sat: 72%;
+  --instance-lum: 70%;
 
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.25);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
@@ -119,18 +111,10 @@
   --level-warn: #b97c22;
   --level-error: #c8423a;
 
-  --instance-0: #5762d5;
-  --instance-1: #1f9077;
-  --instance-2: #b97c22;
-  --instance-3: #bb4f93;
-  --instance-4: #3d7fc2;
-  --instance-5: #7a6cd9;
-  --instance-6: #5e8f3e;
-  --instance-7: #c25f4b;
-  --instance-8: #2d9aa5;
-  --instance-9: #9c64d6;
-  --instance-10: #908a1f;
-  --instance-11: #4e6fc0;
+  /* Same generated hues as dark mode, but darker + a touch less saturated so
+     they hold contrast (and a readable knockout label) on the light surfaces. */
+  --instance-sat: 56%;
+  --instance-lum: 47%;
 
   --shadow: 0 1px 2px rgba(20, 20, 30, 0.06), 0 6px 24px rgba(20, 20, 30, 0.07);
   --shadow-sm: 0 1px 2px rgba(20, 20, 30, 0.06);
