@@ -23,6 +23,15 @@ import { parseAttributes, parseTrace } from '../lib/trace'
 const TIMEOUT_MS = 15_000
 const BODY_EXCERPT_CHARS = 256
 const MAX_SPANS_PER_SPAN_SET = 100
+/**
+ * Per-window fetch cap, decoupled from the result `limit`. Tempo returns an
+ * ARBITRARY subset when a window has more matches than the cap, so the cap must
+ * exceed a window's match count — otherwise a broad query (e.g. `height >= N`,
+ * which matches every node's every round) drops random nodes and groups render
+ * incomplete. The newest windows are short (30s, 90s) so this covers them; the
+ * merged result is still sliced to the caller's `limit`.
+ */
+const WINDOW_FETCH_LIMIT = 1000
 
 /** Pipeline suffix appended to event searches (exported so the API server's
  * query echo states exactly what was executed). */
@@ -87,15 +96,16 @@ export class TempoClient implements ITempoClient {
    * Tempo search has NO result ordering: it returns an arbitrary first-N over
    * the range ("even identical searches differ" — Tempo API docs). To make
    * "latest N traces" deterministic, the range is walked backward in
-   * geometrically growing windows (newest 30s first), each queried in
-   * parallel; results fill newest-first and dedupe by trace id.
+   * geometrically growing windows (newest 30s first), each queried in parallel
+   * at WINDOW_FETCH_LIMIT (so a window returns ALL its matches, not an arbitrary
+   * subset); results fill newest-first, dedupe by trace id, and slice to `limit`.
    */
   async searchTraces(filter: FilterState, range: TimeRange): Promise<TraceSummary[]> {
     return this.windowedSearch(
       range,
       filter.limit,
       (w) =>
-        this.searchWindow(buildTraceQL(filter), filter.limit, w, (t) => {
+        this.searchWindow(buildTraceQL(filter), WINDOW_FETCH_LIMIT, w, (t) => {
           const s = toSummary(t)
           return s === null ? [] : [s]
         }),
@@ -115,7 +125,7 @@ export class TempoClient implements ITempoClient {
     return this.windowedSearch(
       range,
       filter.limit,
-      (w) => this.searchWindow(q, filter.limit, w, toEventSummaries),
+      (w) => this.searchWindow(q, WINDOW_FETCH_LIMIT, w, toEventSummaries),
       eventSummaryKey,
       (e) => e.spanStartUnixMs,
     )
