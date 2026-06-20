@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faCheck, faCopy } from '@fortawesome/free-solid-svg-icons'
+import { faCheck, faCopy, faDownload } from '@fortawesome/free-solid-svg-icons'
 import type { TraceModel } from '../lib/model'
 import { exportTrace } from '../lib/export'
 import './ExportModal.css'
@@ -47,6 +47,50 @@ export default function ExportModal({
     copyTimer.current = window.setTimeout(() => setCopied(false), 1200)
   }
 
+  const download = async () => {
+    const name = `trace-${exported.traceId || 'export'}.json`
+    const picker = (
+      window as unknown as {
+        showSaveFilePicker?: (opts: {
+          suggestedName?: string
+          types?: { description: string; accept: Record<string, string[]> }[]
+        }) => Promise<{
+          createWritable: () => Promise<{
+            write: (data: string) => Promise<void>
+            close: () => Promise<void>
+          }>
+        }>
+      }
+    ).showSaveFilePicker
+    if (picker) {
+      try {
+        const handle = await picker({
+          suggestedName: name,
+          types: [
+            { description: 'JSON', accept: { 'application/json': ['.json'] } },
+          ],
+        })
+        const writable = await handle.createWritable()
+        await writable.write(json)
+        await writable.close()
+        return
+      } catch (err) {
+        // User cancelled the picker — nothing to do.
+        if (err instanceof DOMException && err.name === 'AbortError') return
+        // Otherwise fall back to the anchor download below.
+      }
+    }
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
   const hiddenCount = model.instances.filter((i) => hiddenInstances.has(i.id)).length
 
   return (
@@ -67,6 +111,10 @@ export default function ExportModal({
           <button type="button" className={`btn btn-sm xm-copy${copied ? ' xm-copied' : ''}`} onClick={copy}>
             <FontAwesomeIcon icon={copied ? faCheck : faCopy} />
             {copied ? 'copied' : 'copy'}
+          </button>
+          <button type="button" className="btn btn-sm" onClick={() => void download()}>
+            <FontAwesomeIcon icon={faDownload} />
+            download
           </button>
           <button
             type="button"
