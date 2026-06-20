@@ -62,6 +62,14 @@ function matchedSummary(names: string[]): string {
     .join(', ')
 }
 
+/** A compare row's name is "base ×N"; split it so the ×N renders as faint
+ *  subtext (matching the matched-span style) instead of part of the name. */
+const COMPARE_COUNT_RE = /^(.+) ×(\d+)$/
+function splitCompareCount(label: string): { base: string; count: string } | null {
+  const m = COMPARE_COUNT_RE.exec(label)
+  return m ? { base: m[1], count: m[2] } : null
+}
+
 const SORT_OPTIONS = [
   { label: 'most recent', value: 'recent' },
   { label: 'slowest', value: 'slowest' },
@@ -82,11 +90,12 @@ function Row({
   traceLabel?: string
   onTip: OnTip
 }) {
-  // Tempo sometimes omits rootTraceName (incomplete/rootless trace). Fall back
-  // to the matched span name so the row is never nameless; "→ matched" only
-  // shows when it adds something beyond the primary label.
+  // Compare rows render "base ×N" with the ×N as faint subtext. Otherwise fall
+  // back to the matched span name when Tempo omits rootTraceName (incomplete
+  // trace); "→ matched" only shows when it adds beyond the primary label.
+  const compare = traceLabel === undefined ? null : splitCompareCount(trace.rootTraceName)
   const matched = trace.matchedSpanNames.length > 0 ? matchedSummary(trace.matchedSpanNames) : ''
-  const primary = trace.rootTraceName || matched
+  const primary = compare ? compare.base : trace.rootTraceName || matched
   return (
     <tr onClick={onClick}>
       <td
@@ -101,13 +110,18 @@ function Row({
         ) : (
           <>
             {primary}
-            {matched !== '' && matched !== primary && (
-              <span
-                className="tl-matched faint"
-                title={`spans matched by the query: ${matched}`}
-              >
-                → {matched}
-              </span>
+            {compare ? (
+              <span className="tl-matched faint">×{compare.count}</span>
+            ) : (
+              matched !== '' &&
+              matched !== primary && (
+                <span
+                  className="tl-matched faint"
+                  title={`spans matched by the query: ${matched}`}
+                >
+                  → {matched}
+                </span>
+              )
             )}
           </>
         )}
@@ -142,6 +156,8 @@ function EventRow({
   traceLabel?: string
   onTip: OnTip
 }) {
+  // Compare rows render "base ×N" with the ×N as faint subtext.
+  const compare = traceLabel === undefined ? null : splitCompareCount(event.eventName)
   return (
     <tr onClick={onClick}>
       <td className="tl-start" title={formatDateTime(event.spanStartUnixMs)}>
@@ -149,7 +165,14 @@ function EventRow({
         <span className="tl-ago faint">{formatAgo(event.spanStartUnixMs)}</span>
       </td>
       <td className={event.level !== null ? `tl-event level-${event.level}` : 'tl-event'}>
-        {event.eventName}
+        {compare ? (
+          <>
+            {compare.base}
+            <span className="tl-matched faint">×{compare.count}</span>
+          </>
+        ) : (
+          event.eventName
+        )}
       </td>
       <td className="tl-name">{event.spanName}</td>
       <td>

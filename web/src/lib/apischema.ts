@@ -235,7 +235,7 @@ export const traceSummarySchema = {
     rootTraceName: { type: 'string', description: "Root span's name (may be empty)." },
     startUnixMs: { type: 'number', description: 'Trace start, epoch milliseconds.' },
     durationMs: { type: 'number', description: 'Trace duration in milliseconds.' },
-    spanCount: { type: 'integer', description: 'Number of spans the query matched.' },
+    spanCount: { type: 'integer', description: 'Total spans in the trace (from Tempo serviceStats; falls back to the matched-span count when unavailable).' },
     services: {
       type: 'array',
       description: 'Distinct service names seen in the trace, when available.',

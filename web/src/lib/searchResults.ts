@@ -74,7 +74,8 @@ function traceRow(id: string, traces: readonly TraceSummary[], name: string): Tr
   return {
     traceId: id,
     rootServiceName: '',
-    rootTraceName: `${name} x${traces.length}`,
+    // "name ×N" — the row renders the ×N as faint subtext (see COMPARE_COUNT_RE).
+    rootTraceName: `${name} ×${traces.length}`,
     startUnixMs,
     durationMs: Math.max(0, endUnixMs - startUnixMs),
     spanCount,
@@ -96,8 +97,9 @@ function eventRow(id: string, events: readonly EventSummary[], name: string): Ev
     ...first,
     traceId: id,
     spanId: id,
-    spanName: `${first.spanName} x${events.length}`,
-    eventName: `${name} x${events.length}`,
+    spanName: first.spanName,
+    // "name ×N" — the row renders the ×N as faint subtext (see COMPARE_COUNT_RE).
+    eventName: `${name} ×${events.length}`,
     serviceName: `${new Set(events.map((event) => event.serviceName)).size} services`,
     spanStartUnixMs,
     spanDurationNs: Math.max(0, Math.round((latestEndMs - spanStartUnixMs) * 1e6)),

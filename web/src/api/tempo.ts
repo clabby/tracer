@@ -294,7 +294,7 @@ function toSummary(raw: unknown): TraceSummary | null {
       ? [t.spanSet]
       : []
 
-  let spanCount = 0
+  let matchedCount = 0
   const services = new Set<string>()
   const matchedSpanIds: string[] = []
   const matchedSpanNames: string[] = []
@@ -303,7 +303,7 @@ function toSummary(raw: unknown): TraceSummary | null {
     if (typeof ss !== 'object' || ss === null) continue
     const set = ss as Record<string, unknown>
     const matched = set.matched
-    if (typeof matched === 'number') spanCount += matched
+    if (typeof matched === 'number') matchedCount += matched
     collectServiceNames(set.attributes, services)
     if (Array.isArray(set.spans)) {
       for (const span of set.spans) {
@@ -323,10 +323,25 @@ function toSummary(raw: unknown): TraceSummary | null {
     }
   }
 
-  // serviceStats (Tempo 2.x) lists every service in the trace — better than
-  // scraping matched-span attributes.
+  // serviceStats (Tempo 2.x) is `{ service: { spanCount, errorCount } }`: it
+  // names every service in the trace AND gives the trace's TOTAL spans per
+  // service — what you actually see on open. Prefer that for the span count
+  // (the matched count is just the query's hits); fall back to matched when the
+  // stats are absent or carry no counts.
+  let totalFromStats = 0
+  let hasStats = false
   if (typeof t.serviceStats === 'object' && t.serviceStats !== null) {
-    for (const name of Object.keys(t.serviceStats)) services.add(name)
+    for (const [name, stat] of Object.entries(t.serviceStats as Record<string, unknown>)) {
+      services.add(name)
+      const sc =
+        stat !== null && typeof stat === 'object'
+          ? (stat as { spanCount?: unknown }).spanCount
+          : undefined
+      if (typeof sc === 'number') {
+        totalFromStats += sc
+        hasStats = true
+      }
+    }
   }
 
   return {
@@ -335,7 +350,7 @@ function toSummary(raw: unknown): TraceSummary | null {
     rootTraceName: typeof t.rootTraceName === 'string' ? t.rootTraceName : '',
     startUnixMs,
     durationMs,
-    spanCount,
+    spanCount: hasStats ? totalFromStats : matchedCount,
     services: [...services].sort(),
     matchedSpanIds: [...new Set(matchedSpanIds)],
     matchedSpanNames,

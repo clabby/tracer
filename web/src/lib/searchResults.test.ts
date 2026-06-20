@@ -47,7 +47,7 @@ describe('groupTraceSummaries', () => {
       trace('d', 'node-1', 11, 59),
     ], filter)
 
-    expect(grouped.rows.map((row) => row.rootTraceName)).toEqual(['round x2', 'round x2'])
+    expect(grouped.rows.map((row) => row.rootTraceName)).toEqual(['round ×2', 'round ×2'])
     expect(grouped.compares).toHaveLength(2)
     expect(grouped.compares.map((group) => group.filter.attrs[0].value).sort()).toEqual(['10', '11'])
   })
@@ -67,7 +67,7 @@ describe('groupEventSummaries', () => {
       event('c', 'node-0', 11),
     ], filter)
 
-    expect(grouped.rows.map((row) => row.eventName).sort()).toEqual(['commit.done', 'commit.done x2'])
+    expect(grouped.rows.map((row) => row.eventName).sort()).toEqual(['commit.done', 'commit.done ×2'])
     expect(grouped.compares).toHaveLength(1)
     expect(grouped.compares[0].target).toBe('events')
     expect(grouped.compares[0].filter.attrs[0]).toMatchObject({ key: 'height', op: '=', value: '10' })

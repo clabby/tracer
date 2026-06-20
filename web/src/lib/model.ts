@@ -285,6 +285,7 @@ export interface TraceSummary {
   rootTraceName: string
   startUnixMs: number
   durationMs: number
+  /** Total spans in the trace (Tempo serviceStats; matched-span count if absent). */
   spanCount: number
   /** Distinct service names seen in the trace, when available. */
   services: string[]
