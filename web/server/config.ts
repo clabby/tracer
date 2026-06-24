@@ -22,6 +22,10 @@ export function normalizeTempoUrl(raw: string): string {
   return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`
 }
 
+export function defaultStaticDir(): string {
+  return `${import.meta.dir}/../dist`
+}
+
 export function loadConfig(env: Record<string, string | undefined> = process.env): ServerConfig {
   const rawTempo = env.TEMPO_URL
   if (rawTempo === undefined || rawTempo.trim() === '') {
@@ -39,7 +43,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   return {
     port,
     tempoUrl: normalizeTempoUrl(rawTempo),
-    staticDir: env.STATIC_DIR ?? `${import.meta.dir}/../dist`,
+    staticDir: env.STATIC_DIR ?? defaultStaticDir(),
   }
 }
 

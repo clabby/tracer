@@ -1,5 +1,7 @@
 node_modules/
 dist/
+native/
+.tracer-*
 target/
 .docker-cache/
 .DS_Store

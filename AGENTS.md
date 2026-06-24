@@ -21,6 +21,9 @@ Web + server (`cd web`, bun is the package manager):
   type diverge.
 - `bun test src server` — unit tests (`bun:test`)
 - `bun run build` — `tsc --noEmit && vite build`
+- `bun run package:linux` — build `native/tracer-linux-amd64.tar.gz` and
+  `native/tracer-linux-arm64.tar.gz` with a launcher, compiled server binary,
+  and `dist/`
 
 CI (`.github/workflows/ci.yml`) runs check → test → build on push/PR. Run all
 three locally before handing work back.
@@ -69,7 +72,8 @@ web/                  TypeScript + React 19 + Vite SPA, plus the Bun API server
 skills/tracer-api/    Claude Code skill for querying a deployed tracer API
 docker/               prod image: Dockerfile.web (bun runtime), bake, justfile
 docker/demo/          demo stack: compose, tempo.yaml, loadgen/ (consensus-sim)
-.github/workflows/    ci.yml (build) + docker.yml (multi-arch release on v* tags)
+.github/workflows/    ci.yml (build) + docker.yml (multi-arch image) +
+                       release.yml (native Linux tarballs on v* tags)
 ```
 
 ## Hard rules
