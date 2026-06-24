@@ -60,18 +60,28 @@ purpose-built viewer that goes further:
 
 ## Quick start
 
-Run the published image, pointed at your Tempo. One process serves the UI,
-the REST API (`/api/v1`), and a read-only `/tempo/*` passthrough, so browsers
-and agents only talk to the viewer's origin (no CORS needed on Tempo):
+Run the published Linux tarball, pointed at your Tempo. One process serves the
+UI, the REST API (`/api/v1`), and a read-only `/tempo/*` passthrough, so
+browsers and agents only talk to the viewer's origin (no CORS needed on Tempo):
+
+```sh
+curl -LO https://github.com/clabby/tracer/releases/latest/download/tracer-linux-amd64.tar.gz
+tar xzf tracer-linux-amd64.tar.gz
+TEMPO_URL=https://tempo.example.com tracer-linux-amd64/bin/tracer
+```
+
+Then open http://localhost:8080. `TEMPO_URL` is required and accepts a
+`host:port` (assumed http, e.g. `tempo:3200`) or a full URL.
+
+Docker is still published for local demos and container deployments:
 
 ```sh
 docker run -p 8080:8080 -e TEMPO_URL=https://tempo.example.com \
   ghcr.io/clabby/tracer-web:latest
 ```
 
-Then open http://localhost:8080. `TEMPO_URL` is required and accepts a
-`host:port` (assumed http, e.g. `tempo:3200`) or a full URL; to reach a Tempo
-running on the host, use `-e TEMPO_URL=http://host.docker.internal:3200`. See
+To reach a Tempo running on the host from Docker, use
+`-e TEMPO_URL=http://host.docker.internal:3200`. See
 [`docker/README.md`](docker/README.md) for deployment details.
 
 ## Demo
@@ -138,6 +148,7 @@ bun run dev:api    # API server on :7777 (TEMPO_URL defaults to localhost:3200)
 bun run dev        # http://localhost:5173, proxies /api → :7777, /tempo → :3200
 bun test src server # unit tests
 bun run check      # typecheck (also the API schema drift gate)
+bun run package:linux # native Linux tarballs under web/native/
 ```
 
 The Rust load generator lives in `docker/demo/loadgen/`

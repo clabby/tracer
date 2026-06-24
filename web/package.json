@@ -7,6 +7,7 @@
     "dev": "vite",
     "dev:api": "TEMPO_URL=${TEMPO_URL:-localhost:3200} PORT=7777 bun run --watch server/index.ts",
     "build": "tsc --noEmit && vite build",
+    "package:linux": "bun run scripts/package-linux.ts",
     "preview": "vite preview",
     "test": "bun test src server",
     "check": "tsc --noEmit"

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { loadConfig, normalizeTempoUrl, redactTempoUrl } from './config'
+import { defaultStaticDir, loadConfig, normalizeTempoUrl, redactTempoUrl } from './config'
 
 describe('normalizeTempoUrl', () => {
   test('host:port gets an http scheme (the Caddy contract)', () => {
@@ -27,7 +27,12 @@ describe('loadConfig', () => {
     const c = loadConfig({ TEMPO_URL: 'tempo:3200' })
     expect(c.port).toBe(8080)
     expect(c.tempoUrl).toBe('http://tempo:3200')
-    expect(c.staticDir).not.toBeNull()
+    expect(c.staticDir).toBe(defaultStaticDir())
+  })
+
+  test('STATIC_DIR overrides the default UI bundle location', () => {
+    const c = loadConfig({ TEMPO_URL: 'tempo:3200', STATIC_DIR: '/opt/tracer/dist' })
+    expect(c.staticDir).toBe('/opt/tracer/dist')
   })
 })
 
