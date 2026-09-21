@@ -214,6 +214,31 @@
   z-index: 2;
 }
 
+.fg-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  z-index: 3;
+  background: color-mix(in srgb, var(--text-faint) 45%, transparent);
+  pointer-events: none;
+}
+
+.fg-cursor-label {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--flame-bg);
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
 .fg-lane {
   position: relative;
 }
