@@ -49,7 +49,12 @@
   overflow-wrap: anywhere;
 }
 .ed-instance {
+  max-width: 100%;
   cursor: default;
+}
+.ed-instance .inst-name {
+  min-width: 0;
+  max-width: none;
 }
 
 .ed-section {

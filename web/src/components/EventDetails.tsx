@@ -48,7 +48,9 @@ export default function EventDetails({
                 className="swatch"
                 style={{ background: instanceColorVar(instance?.colorIndex ?? 0) }}
               />
-              {instance !== undefined ? instance.id : event.instanceId}
+              <span className="inst-name" title={instance?.id ?? event.instanceId}>
+                {instance?.id ?? event.instanceId}
+              </span>
             </span>
           </span>
 

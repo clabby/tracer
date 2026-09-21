@@ -58,7 +58,9 @@ export default function SpanDetails({
                   background: instanceColorVar(instance?.colorIndex ?? 0),
                 }}
               />
-              {instance !== undefined ? instance.id : span.instanceId}
+              <span className="inst-name" title={instance?.id ?? span.instanceId}>
+                {instance?.id ?? span.instanceId}
+              </span>
             </span>
           </span>
 
