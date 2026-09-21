@@ -30,6 +30,10 @@
   /* Motion */
   --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
   --speed: 120ms;
+
+  /* Subsystem families occupy separated hue bands; components stay nearby. */
+  --subsystem-hue-start: 170;
+  --subsystem-hue-spread: 60;
 }
 
 :root[data-theme='dark'] {
@@ -74,6 +78,7 @@
      they pop on the dark surfaces. */
   --instance-sat: 72%;
   --instance-lum: 70%;
+  --subsystem-unknown: #9898a2;
 
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.25);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
@@ -123,6 +128,7 @@
      they hold contrast (and a readable knockout label) on the light surfaces. */
   --instance-sat: 56%;
   --instance-lum: 47%;
+  --subsystem-unknown: #777783;
 
   --shadow: 0 1px 2px rgba(20, 20, 30, 0.06), 0 6px 24px rgba(20, 20, 30, 0.07);
   --shadow-sm: 0 1px 2px rgba(20, 20, 30, 0.06);

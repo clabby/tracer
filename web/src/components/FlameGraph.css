@@ -118,6 +118,7 @@
   flex: none;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 10px 0 8px;
   border-bottom: 1px solid var(--border);
@@ -139,6 +140,44 @@
 }
 .fg-sort .sel-trigger {
   height: 26px;
+}
+
+.fg-color-by {
+  width: 174px;
+}
+.fg-subsystems {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+.fg-subsystem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fg-target-tree {
+  width: 100%;
+  min-width: 0;
+}
+.fg-target-tree summary {
+  cursor: pointer;
+}
+.fg-target-tree-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 160px;
+  overflow: auto;
+  margin-top: 6px;
+  line-height: 20px;
+}
+.fg-target-name {
+  white-space: nowrap;
 }
 
 /* -------------------------------------------------------------- timeline -- */
@@ -197,8 +236,9 @@
   position: fixed;
   z-index: 20;
   pointer-events: none;
-  min-width: 190px;
-  max-width: 280px;
+  width: max-content;
+  min-width: min(190px, calc(100vw - 8px));
+  max-width: min(280px, calc(100vw - 8px));
   padding: 8px 10px;
   background: var(--surface-raised);
   border: 1px solid var(--border-strong);
@@ -248,6 +288,20 @@
   align-items: center;
   gap: 6px;
   color: var(--text);
+}
+
+.fg-tooltip-target-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  margin: 4px 0;
+}
+.fg-tooltip-target {
+  display: block;
+  min-width: 0;
+  /* Namespace separators provide normal breaks; only an oversized identifier
+     needs this last-resort wrap on a narrow viewport. */
+  overflow-wrap: anywhere;
 }
 
 /* ---------------------------------------------------------------- motion -- */
